@@ -1,0 +1,141 @@
+# Companies to fetch jobs from via ATS public APIs.
+# source: greenhouse | ashby | lever
+# slug: the board slug used in the API endpoint
+#
+# Greenhouse: https://boards-api.greenhouse.io/v1/boards/{slug}/jobs
+# Ashby:      https://api.ashbyhq.com/posting-api/job-board/{slug}
+# Lever:      https://api.lever.co/v0/postings/{slug}
+
+companies:
+  # -- AI Labs --
+  - name: Anthropic
+    source: greenhouse
+    slug: anthropic
+
+  - name: Cohere
+    source: ashby
+    slug: cohere
+
+  - name: Mistral AI
+    source: lever
+    slug: mistral
+
+  # -- Voice AI --
+  - name: PolyAI
+    source: greenhouse
+    slug: polyai
+
+  - name: Parloa
+    source: greenhouse
+    slug: parloa
+
+  - name: Hume AI
+    source: greenhouse
+    slug: humeai
+
+  # -- AI-native Platforms --
+  - name: Intercom
+    source: greenhouse
+    slug: intercom
+
+  - name: Airtable
+    source: greenhouse
+    slug: airtable
+
+  - name: Vercel
+    source: greenhouse
+    slug: vercel
+
+  - name: Temporal
+    source: greenhouse
+    slug: temporal
+
+  - name: Arize AI
+    source: greenhouse
+    slug: arizeai
+
+  - name: Glean
+    source: greenhouse
+    slug: gleanwork
+
+  - name: RunPod
+    source: greenhouse
+    slug: runpod
+
+  - name: n8n
+    source: ashby
+    slug: n8n
+
+  - name: Zapier
+    source: greenhouse
+    slug: zapier
+
+  # -- Developer Tools --
+  - name: Linear
+    source: ashby
+    slug: linear
+
+  - name: Notion
+    source: greenhouse
+    slug: notion
+
+  - name: Figma
+    source: greenhouse
+    slug: figma
+
+  - name: Loom
+    source: greenhouse
+    slug: loom
+
+  - name: Descript
+    source: greenhouse
+    slug: descript
+
+# Title filter — applied after fetching, before storing.
+# A job must match at least one positive keyword AND zero negative keywords.
+title_filter:
+  positive:
+    - "AI"
+    - "ML"
+    - "Machine Learning"
+    - "Python"
+    - "Full Stack"
+    - "LLM"
+    - "Agent"
+    - "GenAI"
+    - "NLP"
+    - "MLOps"
+    - "Platform Engineer"
+    - "Backend"
+    - "Software Engineer"
+    - "Solutions Engineer"
+    - "Forward Deployed"
+  negative:
+    - "Intern"
+    - "Junior"
+    - ".NET"
+    - "Java "
+    - "iOS"
+    - "Android"
+    - "Sales"
+    - "Marketing"
+    - "Recruiter"
+
+# Location filter — case-insensitive substring match.
+# Empty location on a job always passes.
+location_filter:
+  allow:
+    - "Remote"
+    - "United States"
+    - "United Kingdom"
+    - "Pakistan"
+    - "Dubai"
+    - "London"
+    - "New York"
+    - "San Francisco"
+  block:
+    - "India"
+    - "Singapore"
+    - "Japan"
+    - "Brazil"
+    - "Australia"
