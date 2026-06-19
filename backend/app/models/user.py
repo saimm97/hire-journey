@@ -14,7 +14,10 @@ class User(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     username: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Nullable: accounts created via Google OAuth have no local password.
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Google's stable subject id ("sub"); set only for Google-linked accounts.
+    google_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     resumes: Mapped[list["Resume"]] = relationship(back_populates="user", cascade="all, delete-orphan")

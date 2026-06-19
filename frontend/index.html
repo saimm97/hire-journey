@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Career Engine — Sign in</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="card">
+    <h1 class="brand">Career Engine</h1>
+
+    <!-- Auth view: shown when logged out -->
+    <section id="auth-view">
+      <div class="tabs" role="tablist">
+        <button id="tab-signin" class="tab is-active" role="tab" type="button">Sign in</button>
+        <button id="tab-signup" class="tab" role="tab" type="button">Sign up</button>
+      </div>
+
+      <!-- Sign in -->
+      <form id="signin-form" class="form">
+        <label class="field">
+          <span>Email or username</span>
+          <input name="identifier" type="text" autocomplete="username" required />
+        </label>
+        <label class="field">
+          <span>Password</span>
+          <input name="password" type="password" autocomplete="current-password" required />
+        </label>
+        <button class="btn" type="submit">Sign in</button>
+      </form>
+
+      <!-- Sign up -->
+      <form id="signup-form" class="form is-hidden">
+        <label class="field">
+          <span>Username</span>
+          <input name="username" type="text" autocomplete="username"
+                 minlength="3" maxlength="50" pattern="[A-Za-z0-9_]+" required />
+          <small class="hint">Letters, numbers and underscores only.</small>
+        </label>
+        <label class="field">
+          <span>Email</span>
+          <input name="email" type="email" autocomplete="email" required />
+        </label>
+        <label class="field">
+          <span>Password</span>
+          <input name="password" type="password" autocomplete="new-password"
+                 minlength="8" required />
+          <small class="hint">At least 8 characters.</small>
+        </label>
+        <button class="btn" type="submit">Create account</button>
+      </form>
+
+      <p id="message" class="message" role="alert"></p>
+
+      <!-- Populated only when the backend has a Google client id configured -->
+      <div id="google-section" class="google-section is-hidden">
+        <div class="divider"><span>or</span></div>
+        <div id="google-btn"></div>
+      </div>
+    </section>
+
+    <!-- Session view: shown when logged in -->
+    <section id="session-view" class="is-hidden">
+      <p class="welcome">Signed in as</p>
+      <p id="session-username" class="session-username"></p>
+      <p id="session-email" class="session-email"></p>
+      <button id="logout-btn" class="btn btn-secondary" type="button">Log out</button>
+    </section>
+  </main>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="app.js"></script>
+</body>
+</html>
