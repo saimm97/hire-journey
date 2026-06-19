@@ -219,3 +219,7 @@ __marimo__/
 
 
 /.claude
+/.venv
+/venv
+/env
+/lib

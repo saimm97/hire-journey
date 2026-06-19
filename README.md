@@ -93,7 +93,9 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 
 ```bash
 cd backend
-pip install -e ".[dev]"
+python3 -m venv .venv
+source .venv/bin/activate      # macOS/Linux
+pip install -r requirements-dev.txt
 ```
 
 ### 6. Run migrations
