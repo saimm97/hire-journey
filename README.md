@@ -13,7 +13,7 @@ End-to-end AI-powered job search platform. Upload your resume, discover relevant
 
 ## Prerequisites
 
-- Python 3.11+
+- Python 3.13+
 - Docker
 - Git
 
@@ -93,7 +93,7 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 
 ```bash
 cd backend
-python3 -m venv .venv
+python3.13 -m venv .venv
 source .venv/bin/activate      # macOS/Linux
 pip install -r requirements-dev.txt
 ```
@@ -113,6 +113,49 @@ uvicorn app.main:app --reload
 
 Server runs at [http://localhost:8000](http://localhost:8000)
 Interactive API docs at [http://localhost:8000/docs](http://localhost:8000/docs)
+
+---
+
+## Browsing the database
+
+### Option 1 — DBeaver (GUI, recommended)
+
+Free database client with a visual table browser and SQL editor.
+
+**Linux:**
+```bash
+sudo snap install dbeaver-ce
+```
+
+**macOS:**
+```bash
+brew install --cask dbeaver-community
+```
+Or download from [dbeaver.io](https://dbeaver.io/download).
+
+**Connect:**
+1. Open DBeaver → New Database Connection → PostgreSQL
+2. Fill in:
+   - Host: `localhost`
+   - Port: `5432`
+   - Database: `career_engine`
+   - Username: `postgres`
+   - Password: `postgres`
+3. Test Connection → Finish
+
+### Option 2 — psql (CLI, quick checks)
+
+```bash
+docker exec -it career-engine-db psql -U postgres -d career_engine
+```
+
+Useful commands inside psql:
+```sql
+\dt                  -- list all tables
+\d users             -- show columns of a table
+SELECT * FROM users; -- run any query
+\q                   -- quit
+```
 
 ---
 
