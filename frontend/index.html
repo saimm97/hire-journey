@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Career Engine</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="card">
+    <h1 class="brand" data-str="brand"></h1>
+
+    <section id="auth-view">
+      <div class="tabs" role="tablist">
+        <button id="tab-signin" class="tab is-active" role="tab" type="button" data-str="tabs.signin"></button>
+        <button id="tab-signup" class="tab" role="tab" type="button" data-str="tabs.signup"></button>
+      </div>
+
+      <form id="signin-form" class="form">
+        <label class="field">
+          <span data-str="labels.identifier"></span>
+          <input name="identifier" type="text" autocomplete="username" required />
+        </label>
+        <label class="field">
+          <span data-str="labels.password"></span>
+          <input name="password" type="password" autocomplete="current-password" required />
+        </label>
+        <button class="btn" type="submit" data-str="buttons.signin"></button>
+      </form>
+
+      <form id="signup-form" class="form is-hidden">
+        <label class="field">
+          <span data-str="labels.username"></span>
+          <input name="username" type="text" autocomplete="username"
+                 minlength="3" maxlength="50" pattern="[A-Za-z0-9_]+" required />
+          <small class="hint" data-str="hints.username"></small>
+        </label>
+        <label class="field">
+          <span data-str="labels.email"></span>
+          <input name="email" type="email" autocomplete="email" required />
+        </label>
+        <label class="field">
+          <span data-str="labels.password"></span>
+          <input name="password" type="password" autocomplete="new-password"
+                 minlength="8" required />
+          <small class="hint" data-str="hints.password"></small>
+        </label>
+        <button class="btn" type="submit" data-str="buttons.signup"></button>
+      </form>
+
+      <p id="message" class="message" role="alert"></p>
+
+      <div id="google-section" class="google-section is-hidden">
+        <div class="divider"><span data-str="divider"></span></div>
+        <div id="google-btn"></div>
+      </div>
+    </section>
+
+    <section id="session-view" class="is-hidden">
+      <p class="welcome" data-str="sessionPrompt"></p>
+      <p id="session-username" class="session-username"></p>
+      <p id="session-email" class="session-email"></p>
+      <button id="logout-btn" class="btn btn-secondary" type="button" data-str="buttons.logout"></button>
+    </section>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="strings.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="app.js"></script>
+</body>
+</html>
