@@ -132,6 +132,49 @@ Open [http://localhost:5500](http://localhost:5500). It calls the backend at `ht
 
 ---
 
+## Browsing the database
+
+### Option 1 — DBeaver (GUI, recommended)
+
+Free database client with a visual table browser and SQL editor.
+
+**Linux:**
+```bash
+sudo snap install dbeaver-ce
+```
+
+**macOS:**
+```bash
+brew install --cask dbeaver-community
+```
+Or download from [dbeaver.io](https://dbeaver.io/download).
+
+**Connect:**
+1. Open DBeaver → New Database Connection → PostgreSQL
+2. Fill in:
+   - Host: `localhost`
+   - Port: `5432`
+   - Database: `career_engine`
+   - Username: `postgres`
+   - Password: `postgres`
+3. Test Connection → Finish
+
+### Option 2 — psql (CLI, quick checks)
+
+```bash
+docker exec -it career-engine-db psql -U postgres -d career_engine
+```
+
+Useful commands inside psql:
+```sql
+\dt                  -- list all tables
+\d users             -- show columns of a table
+SELECT * FROM users; -- run any query
+\q                   -- quit
+```
+
+---
+
 ## Day-to-day commands
 
 ```bash
