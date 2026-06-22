@@ -3,14 +3,18 @@ from app.models.evaluation import Evaluation
 from app.models.job import Job
 from app.models.job_note import JobNote
 from app.models.job_score import JobScore
+from app.models.project import Project
 from app.models.resume import Resume
 from app.models.search_session import SearchSession
 from app.models.source import Source
 from app.models.tailored_resume import TailoredResume
 from app.models.user import User
+from app.models.user_profile import UserProfile
 
 __all__ = [
     "User",
+    "UserProfile",
+    "Project",
     "Resume",
     "Source",
     "Job",
