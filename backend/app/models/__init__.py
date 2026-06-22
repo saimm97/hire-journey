@@ -1,4 +1,5 @@
 from app.models.application import Application
+from app.models.company import Company
 from app.models.evaluation import Evaluation
 from app.models.job import Job
 from app.models.job_note import JobNote
@@ -13,6 +14,7 @@ __all__ = [
     "User",
     "Resume",
     "Source",
+    "Company",
     "Job",
     "SearchSession",
     "JobScore",

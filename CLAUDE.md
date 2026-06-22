@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+@PRD.md
+
 ## Identity
 
 Name: Aneeb

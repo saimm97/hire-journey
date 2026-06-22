@@ -11,4 +11,5 @@ class Source(Base):
     name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)  # "greenhouse", "ashby", "lever"
     base_url: Mapped[str] = mapped_column(String(255), nullable=True)
 
+    companies: Mapped[list["Company"]] = relationship(back_populates="source")
     jobs: Mapped[list["Job"]] = relationship(back_populates="source")
