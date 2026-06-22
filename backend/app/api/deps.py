@@ -1,8 +1,4 @@
-"""Shared FastAPI dependencies.
-
-Currently provides ``get_current_user``, the gate every protected endpoint
-depends on to resolve a bearer token into the authenticated ``User`` row.
-"""
+"""Shared FastAPI dependencies."""
 
 import uuid
 from typing import Annotated
@@ -13,6 +9,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import messages
 from app.config import settings
 from app.database import get_db
 from app.models.user import User
@@ -24,29 +21,21 @@ async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> User:
-    """Resolve the bearer token into the matching ``User``, or raise 401.
-
-    Decodes and validates the JWT, reads the user id from the ``sub`` claim, and
-    loads that user from the database. Any failure along the way — bad
-    signature, expired token, malformed/unknown id — results in the same 401 so
-    the response leaks nothing about why validation failed.
-    """
-    credentials_exception = HTTPException(
+    """Resolve a bearer token to its user, or raise 401."""
+    unauthorized = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
+        detail=messages.CREDENTIALS_UNVERIFIED,
+        headers=messages.AUTH_HEADER,
     )
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-        subject = payload.get("sub")
-        if subject is None:
-            raise credentials_exception
-        user_id = uuid.UUID(subject)
-    except (jwt.PyJWTError, ValueError):
-        raise credentials_exception
+        user_id = uuid.UUID(payload.get("sub"))
+    except (jwt.PyJWTError, ValueError, TypeError):
+        raise unauthorized
 
-    result = await db.execute(select(User).where(User.user_id == user_id))
-    user = result.scalar_one_or_none()
+    user = (
+        await db.execute(select(User).where(User.user_id == user_id))
+    ).scalar_one_or_none()
     if user is None:
-        raise credentials_exception
+        raise unauthorized
     return user

@@ -1,18 +1,10 @@
 "use strict";
 
-/**
- * Frontend logic for the Career Engine auth page.
- *
- * Talks to the FastAPI backend over HTTP only — there is no shared code or build
- * step between the two. The bearer token returned by /login is kept in
- * localStorage and replayed on authenticated requests.
- */
+const API_BASE = window.APP_CONFIG.apiBase;
+const STRINGS = window.STRINGS;
+const TOKEN_KEY = STRINGS.storageKey;
+const MESSAGE = { error: "error", success: "success" };
 
-// Base URL of the backend API. Override here if the backend runs elsewhere.
-const API_BASE = "http://localhost:8000/api/v1";
-const TOKEN_KEY = "ce_token";
-
-// --- DOM references -------------------------------------------------------
 const els = {
   authView: document.getElementById("auth-view"),
   sessionView: document.getElementById("session-view"),
@@ -30,29 +22,14 @@ const els = {
 
 // --- Token storage --------------------------------------------------------
 
-/** Return the stored bearer token, or null if the user is not logged in. */
-function getToken() {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-/** Persist the bearer token so it survives page reloads. */
-function setToken(token) {
-  localStorage.setItem(TOKEN_KEY, token);
-}
-
-/** Remove the stored token (used on logout or when a token is rejected). */
-function clearToken() {
-  localStorage.removeItem(TOKEN_KEY);
-}
+const getToken = () => localStorage.getItem(TOKEN_KEY);
+const setToken = (token) => localStorage.setItem(TOKEN_KEY, token);
+const clearToken = () => localStorage.removeItem(TOKEN_KEY);
 
 // --- API calls ------------------------------------------------------------
 
-/**
- * Parse an error body from the API into a human-readable string.
- *
- * FastAPI returns `{detail: "..."}` for raised errors and `{detail: [...]}` for
- * request-validation failures; this normalises both into one message.
- */
+// FastAPI returns {detail: "..."} for raised errors and {detail: [...]} for
+// validation failures; collapse both to a single line.
 function extractError(body, fallback) {
   const detail = body && body.detail;
   if (typeof detail === "string") return detail;
@@ -60,12 +37,6 @@ function extractError(body, fallback) {
   return fallback;
 }
 
-/**
- * Register a new account.
- *
- * @returns {Promise<object>} the created user. Throws an Error with a
- *   user-facing message if registration fails (e.g. username taken).
- */
 async function register({ username, email, password }) {
   const res = await fetch(`${API_BASE}/auth/register`, {
     method: "POST",
@@ -73,60 +44,20 @@ async function register({ username, email, password }) {
     body: JSON.stringify({ username, email, password }),
   });
   const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(extractError(body, "Registration failed."));
+  if (!res.ok) throw new Error(extractError(body, STRINGS.messages.registerFailed));
   return body;
 }
 
-/**
- * Log in and store the returned bearer token.
- *
- * Sends the OAuth2 password form the backend expects (`username` carries either
- * the email or the username). Throws an Error on invalid credentials.
- */
 async function login(identifier, password) {
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: "POST",
     body: new URLSearchParams({ username: identifier, password }),
   });
   const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(extractError(body, "Login failed."));
+  if (!res.ok) throw new Error(extractError(body, STRINGS.messages.loginFailed));
   setToken(body.access_token);
 }
 
-/**
- * Fetch the authenticated user's profile using the stored token.
- *
- * @returns {Promise<object|null>} the user, or null if there is no valid token.
- */
-async function fetchCurrentUser() {
-  const token = getToken();
-  if (!token) return null;
-  const res = await fetch(`${API_BASE}/auth/me`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) {
-    clearToken(); // token missing/expired — force a fresh login
-    return null;
-  }
-  return res.json();
-}
-
-/** Fetch public auth config (whether Google sign-in is enabled, and its client id). */
-async function fetchAuthConfig() {
-  try {
-    const res = await fetch(`${API_BASE}/auth/config`);
-    return res.ok ? res.json() : null;
-  } catch {
-    return null; // backend unreachable — degrade to email/password only
-  }
-}
-
-/**
- * Exchange a Google ID token for our own bearer token and store it.
- *
- * Posts the credential Google handed the browser to the backend, which verifies
- * it and returns a token in the same shape as a normal login.
- */
 async function loginWithGoogle(credential) {
   const res = await fetch(`${API_BASE}/auth/google`, {
     method: "POST",
@@ -134,19 +65,48 @@ async function loginWithGoogle(credential) {
     body: JSON.stringify({ credential }),
   });
   const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(extractError(body, "Google sign-in failed."));
+  if (!res.ok) throw new Error(extractError(body, STRINGS.messages.googleFailed));
   setToken(body.access_token);
 }
 
-// --- View switching -------------------------------------------------------
+async function fetchCurrentUser() {
+  const token = getToken();
+  if (!token) return null;
+  const res = await fetch(`${API_BASE}/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    clearToken();
+    return null;
+  }
+  return res.json();
+}
 
-/** Show a status message under the forms, styled as an error or success note. */
+async function fetchAuthConfig() {
+  try {
+    const res = await fetch(`${API_BASE}/auth/config`);
+    return res.ok ? res.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+// --- Views ----------------------------------------------------------------
+
+// Fill every [data-str] element from STRINGS using its dotted key path.
+function applyStrings() {
+  document.title = STRINGS.brand;
+  document.querySelectorAll("[data-str]").forEach((el) => {
+    const value = el.dataset.str.split(".").reduce((obj, key) => obj?.[key], STRINGS);
+    if (value != null) el.textContent = value;
+  });
+}
+
 function showMessage(text, type) {
   els.message.textContent = text;
   els.message.className = `message ${type ? `is-${type}` : ""}`;
 }
 
-/** Toggle between the "sign in" and "sign up" forms. */
 function switchTab(target) {
   const signin = target === "signin";
   els.tabSignin.classList.toggle("is-active", signin);
@@ -156,7 +116,6 @@ function switchTab(target) {
   showMessage("", null);
 }
 
-/** Render the logged-in view for the given user and hide the auth forms. */
 function showSessionView(user) {
   els.authView.classList.add("is-hidden");
   els.sessionView.classList.remove("is-hidden");
@@ -164,16 +123,12 @@ function showSessionView(user) {
   els.sessionEmail.textContent = user.email;
 }
 
-/** Render the logged-out view (auth forms) and hide the session panel. */
 function showAuthView() {
   els.sessionView.classList.add("is-hidden");
   els.authView.classList.remove("is-hidden");
 }
 
-/**
- * Run an async form handler while disabling its submit button, so a slow
- * request can't be fired twice and the user gets immediate feedback.
- */
+// Disable the submit button while a request is in flight to prevent double submits.
 async function withSubmitting(form, fn) {
   const button = form.querySelector("button[type=submit]");
   button.disabled = true;
@@ -186,13 +141,8 @@ async function withSubmitting(form, fn) {
 
 // --- Google sign-in -------------------------------------------------------
 
-/**
- * Resolve once the Google Identity Services library has loaded.
- *
- * The GIS script loads asynchronously, so it may not be ready when the page
- * finishes. Polls briefly and resolves false if it never appears (e.g. the
- * script is blocked), so the page still works with email/password only.
- */
+// The GIS script loads asynchronously; resolve false if it never appears so the
+// page still works with email/password only.
 function waitForGoogle(timeoutMs = 5000) {
   return new Promise((resolve) => {
     const start = Date.now();
@@ -204,28 +154,15 @@ function waitForGoogle(timeoutMs = 5000) {
   });
 }
 
-/**
- * GIS callback: receives Google's ID token, swaps it for our token, and logs in.
- *
- * Registered with `google.accounts.id.initialize`; `response.credential` is the
- * signed ID token. Errors surface in the shared message area.
- */
 async function handleGoogleCredential(response) {
   try {
     await loginWithGoogle(response.credential);
-    const user = await fetchCurrentUser();
-    showSessionView(user);
+    showSessionView(await fetchCurrentUser());
   } catch (err) {
-    showMessage(err.message, "error");
+    showMessage(err.message, MESSAGE.error);
   }
 }
 
-/**
- * Initialise the "Continue with Google" button for the given client id.
- *
- * No-ops if Google sign-in is disabled server-side or the GIS library fails to
- * load, leaving the section hidden.
- */
 async function initGoogle(clientId) {
   if (!clientId || !(await waitForGoogle())) return;
   window.google.accounts.id.initialize({
@@ -252,10 +189,9 @@ els.signinForm.addEventListener("submit", (e) => {
   withSubmitting(els.signinForm, async () => {
     try {
       await login(data.get("identifier"), data.get("password"));
-      const user = await fetchCurrentUser();
-      showSessionView(user);
+      showSessionView(await fetchCurrentUser());
     } catch (err) {
-      showMessage(err.message, "error");
+      showMessage(err.message, MESSAGE.error);
     }
   });
 });
@@ -271,10 +207,10 @@ els.signupForm.addEventListener("submit", (e) => {
         password: data.get("password"),
       });
       els.signupForm.reset();
-      switchTab("signin"); // clears any prior message...
-      showMessage("Account created — please sign in.", "success"); // ...then show success
+      switchTab("signin");
+      showMessage(STRINGS.messages.signupSuccess, MESSAGE.success);
     } catch (err) {
-      showMessage(err.message, "error");
+      showMessage(err.message, MESSAGE.error);
     }
   });
 });
@@ -285,16 +221,13 @@ els.logoutBtn.addEventListener("click", () => {
   showMessage("", null);
 });
 
-/**
- * On load: restore an existing session if the stored token is still valid, and
- * set up "Continue with Google" if the backend has it configured.
- */
 (async function init() {
+  applyStrings();
   const user = await fetchCurrentUser();
   if (user) {
     showSessionView(user);
-  } else {
-    const config = await fetchAuthConfig();
-    if (config?.google_enabled) initGoogle(config.google_client_id);
+    return;
   }
+  const config = await fetchAuthConfig();
+  if (config?.google_enabled) initGoogle(config.google_client_id);
 })();

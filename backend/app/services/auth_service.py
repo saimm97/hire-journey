@@ -1,11 +1,4 @@
-"""Authentication business logic.
-
-This layer owns the *rules* of registration and login — uniqueness, password
-hashing, credential checks — and talks to the database through SQLAlchemy. It is
-framework-agnostic: it raises plain domain exceptions instead of HTTP errors, so
-it can be unit-tested without a web request and reused outside the API. The API
-layer is responsible for translating these exceptions into HTTP responses.
-"""
+"""Registration, login, and Google sign-in logic."""
 
 import re
 
@@ -13,6 +6,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import messages
 from app.google_oauth import GoogleAuthError, verify_google_id_token
 from app.models.user import User
 from app.schemas.auth import UserCreate
@@ -20,32 +14,17 @@ from app.security import hash_password, verify_password
 
 
 class UserAlreadyExistsError(Exception):
-    """Raised when a username or email is already taken.
-
-    ``field`` names the conflicting column ("username" or "email") so the API
-    layer can return a precise, user-friendly message.
-    """
-
     def __init__(self, field: str) -> None:
         self.field = field
-        super().__init__(f"{field} already registered")
+        super().__init__(field)
 
 
 class InvalidCredentialsError(Exception):
-    """Raised when a login identifier and password do not match a user."""
+    pass
 
 
 async def register_user(db: AsyncSession, payload: UserCreate) -> User:
-    """Create and persist a new user from a validated registration payload.
-
-    Performs a friendly pre-check for an existing username/email, then relies on
-    the database unique constraints as the authoritative guard against races
-    between concurrent registrations. The password is hashed before storage —
-    plaintext never touches the database.
-
-    Raises:
-        UserAlreadyExistsError: if the username or email is already in use.
-    """
+    """Create a user, rejecting a taken username or email."""
     existing = await db.execute(
         select(User).where(
             or_(User.username == payload.username, User.email == payload.email)
@@ -53,8 +32,9 @@ async def register_user(db: AsyncSession, payload: UserCreate) -> User:
     )
     conflict = existing.scalars().first()
     if conflict is not None:
-        field = "username" if conflict.username == payload.username else "email"
-        raise UserAlreadyExistsError(field)
+        raise UserAlreadyExistsError(
+            "username" if conflict.username == payload.username else "email"
+        )
 
     user = User(
         username=payload.username,
@@ -64,9 +44,7 @@ async def register_user(db: AsyncSession, payload: UserCreate) -> User:
     db.add(user)
     try:
         await db.commit()
-    except IntegrityError:
-        # A concurrent request inserted the same username/email between our
-        # pre-check and commit; the unique constraint rejected this row.
+    except IntegrityError:  # lost a race against a concurrent signup
         await db.rollback()
         raise UserAlreadyExistsError("username or email")
     await db.refresh(user)
@@ -74,38 +52,21 @@ async def register_user(db: AsyncSession, payload: UserCreate) -> User:
 
 
 async def authenticate_user(db: AsyncSession, identifier: str, password: str) -> User:
-    """Return the user matching ``identifier`` (email *or* username) and ``password``.
-
-    The password is checked against the stored bcrypt hash. A missing user and a
-    wrong password raise the *same* error, so the response cannot be used to
-    discover which usernames or emails exist.
-
-    Raises:
-        InvalidCredentialsError: if no user matches or the password is wrong.
-    """
+    """Return the user matching identifier (email or username) and password."""
     result = await db.execute(
         select(User).where(or_(User.email == identifier, User.username == identifier))
     )
     user = result.scalar_one_or_none()
-    # A user with no password_hash is a Google-only account: it can never be
-    # authenticated by password, so treat it like a missing user.
     if user is None or not user.password_hash or not verify_password(password, user.password_hash):
-        raise InvalidCredentialsError()
+        raise InvalidCredentialsError
     return user
 
 
-async def _generate_unique_username(db: AsyncSession, email: str) -> str:
-    """Derive a unique, schema-valid username from an email address.
-
-    Uses the email's local part, stripped to the allowed character set, and
-    appends an incrementing suffix until the username is free. Guarantees a
-    result of 3–50 characters matching ``^[A-Za-z0-9_]+$``.
-    """
+async def _unique_username(db: AsyncSession, email: str) -> str:
     base = re.sub(r"[^A-Za-z0-9_]", "", email.split("@")[0]) or "user"
     if len(base) < 3:
         base = f"{base}user"
-    base = base[:40]  # leave headroom for a numeric suffix within the 50-char limit
-
+    base = base[:40]
     candidate, suffix = base, 0
     while (
         await db.execute(select(User.user_id).where(User.username == candidate))
@@ -116,45 +77,27 @@ async def _generate_unique_username(db: AsyncSession, email: str) -> str:
 
 
 async def authenticate_google_user(db: AsyncSession, credential: str) -> User:
-    """Resolve a Google ID token to a local user, creating or linking as needed.
-
-    The credential is verified with Google first, then mapped to an account in
-    priority order:
-
-    1. An account already linked to this Google id — returned as-is.
-    2. An existing account with the same (Google-verified) email — linked by
-       storing the Google id, so password and Google sign-in reach one account.
-    3. Otherwise a fresh password-less account with a generated username.
-
-    Linking by email is gated on Google's ``email_verified`` flag to prevent a
-    spoofed email from hijacking an existing account.
-
-    Raises:
-        GoogleAuthError: if the token is invalid or an unverified email collides
-            with an existing account.
-    """
+    """Resolve a Google ID token to a user, linking or creating as needed."""
     claims = await verify_google_id_token(credential)
-    google_sub = claims["sub"]
-    email = claims["email"]
-    email_verified = claims.get("email_verified", False)
+    google_sub, email = claims["sub"], claims["email"]
 
     linked = await db.execute(select(User).where(User.google_id == google_sub))
     user = linked.scalar_one_or_none()
     if user is not None:
         return user
 
-    by_email = await db.execute(select(User).where(User.email == email))
-    user = by_email.scalar_one_or_none()
+    existing = await db.execute(select(User).where(User.email == email))
+    user = existing.scalar_one_or_none()
     if user is not None:
-        if not email_verified:
-            raise GoogleAuthError("Google email is not verified; cannot link account.")
+        if not claims.get("email_verified", False):  # never link an unverified email
+            raise GoogleAuthError(messages.GOOGLE_EMAIL_UNVERIFIED)
         user.google_id = google_sub
         await db.commit()
         await db.refresh(user)
         return user
 
     user = User(
-        username=await _generate_unique_username(db, email),
+        username=await _unique_username(db, email),
         email=email,
         google_id=google_sub,
         password_hash=None,
@@ -162,14 +105,13 @@ async def authenticate_google_user(db: AsyncSession, credential: str) -> User:
     db.add(user)
     try:
         await db.commit()
-    except IntegrityError:
-        # Concurrent first-time sign-in for the same Google account: re-read the
-        # row the other request committed instead of failing.
+    except IntegrityError:  # concurrent first sign-in for the same account
         await db.rollback()
-        existing = await db.execute(select(User).where(User.google_id == google_sub))
-        user = existing.scalar_one_or_none()
+        user = (
+            await db.execute(select(User).where(User.google_id == google_sub))
+        ).scalar_one_or_none()
         if user is None:
-            raise GoogleAuthError("Could not create account from Google sign-in.")
+            raise GoogleAuthError(messages.GOOGLE_ACCOUNT_FAILED)
     else:
         await db.refresh(user)
     return user
