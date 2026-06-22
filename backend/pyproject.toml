@@ -22,8 +22,10 @@ dependencies = [
     "python-dotenv>=1.0.0",
 
     # Auth
-    "python-jose[cryptography]>=3.3.0",
-    "passlib[bcrypt]>=1.7.4",
+    "PyJWT>=2.10.0",            # JWT signing/verification (replaces python-jose)
+    "bcrypt>=4.1.0",            # password hashing (used directly, not via passlib)
+    "email-validator>=2.0.0",  # backs pydantic EmailStr
+    "google-auth>=2.40.0",     # verifies Google ID tokens for "Continue with Google"
     "python-multipart>=0.0.9",
 
     # HTTP client (ATS fetching)
@@ -58,3 +60,4 @@ select = ["E", "F", "I"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
