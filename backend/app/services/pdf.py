@@ -4,13 +4,7 @@ import io
 
 import pdfplumber
 
-
-class PdfUnreadableError(Exception):
-    """The bytes could not be opened or read as a PDF."""
-
-
-class PdfNoTextError(Exception):
-    """The PDF opened but contained no extractable text."""
+from app.exceptions import PdfNoTextError, PdfUnreadableError
 
 
 def is_pdf(data: bytes) -> bool:

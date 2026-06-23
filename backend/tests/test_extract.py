@@ -54,3 +54,31 @@ def test_projects_are_separated_with_tech_and_links():
     expense = projects[1]
     assert expense.deployed_url == "https://expense.example.com"
     assert "React" in expense.tech_stack
+
+
+# Blank-line-separated, bullet-free projects — the layout that previously
+# collapsed into a single project.
+BLANK_SEPARATED_CV = """PROJECTS
+Alpha Engine
+Built a recommendation system in Python.
+
+Beta Dashboard
+Real-time analytics UI in React.
+
+Gamma Pipeline
+ETL jobs on AWS.
+
+EDUCATION
+"""
+
+
+def test_blank_separated_projects_are_not_merged():
+    projects = project_extract.extract_projects(BLANK_SEPARATED_CV)
+    assert [p.name for p in projects] == ["Alpha Engine", "Beta Dashboard", "Gamma Pipeline"]
+    assert projects[0].summary.startswith("Built a recommendation")
+
+
+def test_projects_pdf_without_heading_reads_whole_document():
+    pdf_text = "Alpha Engine\n- Did X\n\nBeta Dashboard\n- Did Y\n"
+    projects = project_extract.extract_projects(pdf_text, section_only=False)
+    assert [p.name for p in projects] == ["Alpha Engine", "Beta Dashboard"]

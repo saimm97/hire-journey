@@ -2,8 +2,8 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy import DateTime, ForeignKey, Integer, String, func, text
+from sqlalchemy.dialects.postgresql import ARRAY, JSON, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -12,8 +12,8 @@ if TYPE_CHECKING:
     from app.models.user import User
 
 
-class UserProfile(Base):
-    __tablename__ = "user_profiles"
+class Candidate(Base):
+    __tablename__ = "candidates"
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -24,11 +24,18 @@ class UserProfile(Base):
     last_name: Mapped[str | None] = mapped_column(String(100))
     email: Mapped[str | None] = mapped_column(String(255))
     phone: Mapped[str | None] = mapped_column(String(50))
-    linkedin_url: Mapped[str | None] = mapped_column(String(255))
     github_url: Mapped[str | None] = mapped_column(String(255))
+    portfolio_url: Mapped[str | None] = mapped_column(String(255))
+    minimum_salary: Mapped[int | None] = mapped_column(Integer)
     tech_stack: Mapped[list[str] | None] = mapped_column(ARRAY(String))
-    # Filled later by the LinkedIn endpoint; optional by design.
-    linkedin_summary: Mapped[str | None] = mapped_column(Text)
+    # The full parsed LinkedIn export (URL + all parsed fields), set by the
+    # LinkedIn endpoint. Self-contained, so there is no flat linkedin_url column.
+    linkedin_data: Mapped[dict | None] = mapped_column(JSON)
+    # Required: the roles the user is targeting. Defaults to an empty array so a
+    # candidate auto-created from a CV upload is valid; set via the profile endpoint.
+    desired_role: Mapped[list[str]] = mapped_column(
+        ARRAY(String), nullable=False, server_default=text("'{}'")
+    )
     source_resume_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("resumes.resume_id", ondelete="SET NULL")
     )
@@ -39,4 +46,4 @@ class UserProfile(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    user: Mapped["User"] = relationship(back_populates="profile")
+    user: Mapped["User"] = relationship(back_populates="candidate")

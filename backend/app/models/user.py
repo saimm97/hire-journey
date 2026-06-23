@@ -10,6 +10,7 @@ from app.database import Base
 
 if TYPE_CHECKING:
     from app.models.application import Application
+    from app.models.candidate import Candidate
     from app.models.evaluation import Evaluation
     from app.models.job_note import JobNote
     from app.models.job_score import JobScore
@@ -17,7 +18,6 @@ if TYPE_CHECKING:
     from app.models.resume import Resume
     from app.models.search_session import SearchSession
     from app.models.tailored_resume import TailoredResume
-    from app.models.user_profile import UserProfile
 
 
 class User(Base):
@@ -36,7 +36,7 @@ class User(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    profile: Mapped["UserProfile | None"] = relationship(
+    candidate: Mapped["Candidate | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
     projects: Mapped[list["Project"]] = relationship(

@@ -2,7 +2,7 @@
 
 ## Identity
 
-Name: Aneeb
+Name: Nihal
 Role: Software Engineer
 Background: AI/ML, Full-Stack Development
 Strongest Areas: Python, Machine Learning, backend logic, AI workflows
