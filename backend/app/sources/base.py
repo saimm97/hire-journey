@@ -1,5 +1,9 @@
+import re
 from dataclasses import dataclass
 from typing import Protocol
+
+TIMEOUT = 10.0
+_HTML_TAG = re.compile(r"<[^>]+>")
 
 
 @dataclass
