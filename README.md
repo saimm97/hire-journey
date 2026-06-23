@@ -1,4 +1,4 @@
-# Career Engine
+# Hire Journey
 
 End-to-end AI-powered job search platform. Upload your resume, discover relevant jobs from top ATS boards, get scored recommendations, deep CV evaluations, and tailored applications.
 
