@@ -7,10 +7,7 @@ from google.oauth2 import id_token
 
 from app import messages
 from app.config import settings
-
-
-class GoogleAuthError(Exception):
-    """Google sign-in could not be completed."""
+from app.exceptions import GoogleAuthError
 
 
 async def verify_google_id_token(credential: str) -> dict:

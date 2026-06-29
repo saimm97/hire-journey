@@ -7,20 +7,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import messages
-from app.google_oauth import GoogleAuthError, verify_google_id_token
+from app.exceptions import GoogleAuthError, InvalidCredentialsError, UserAlreadyExistsError
+from app.google_oauth import verify_google_id_token
 from app.models.user import User
 from app.schemas.auth import UserCreate
 from app.security import hash_password, verify_password
-
-
-class UserAlreadyExistsError(Exception):
-    def __init__(self, field: str) -> None:
-        self.field = field
-        super().__init__(field)
-
-
-class InvalidCredentialsError(Exception):
-    pass
 
 
 async def register_user(db: AsyncSession, payload: UserCreate) -> User:
