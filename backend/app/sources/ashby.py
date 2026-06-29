@@ -1,9 +1,8 @@
 import httpx
 
-from app.sources.base import RawJob
+from app.sources.base import RawJob, TIMEOUT
 
 ASHBY_API = "https://api.ashbyhq.com/posting-api/job-board/{slug}?includeCompensation=true"
-TIMEOUT = 10.0
 
 
 class AshbySource:
@@ -18,12 +17,12 @@ class AshbySource:
 
         jobs = []
         for j in data.get("jobs", []):
-            compensation = j.get("compensation", {}) or {}
             jobs.append(RawJob(
                 title=j.get("title", ""),
                 url=j.get("jobUrl", ""),
                 company=company_name,
                 location=j.get("location", ""),
+                description=j.get("descriptionPlain", "") or "",
                 source_name=self.name,
             ))
         return jobs

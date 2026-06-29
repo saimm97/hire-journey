@@ -14,8 +14,8 @@ class Job(Base):
 
     job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     source_id: Mapped[int] = mapped_column(Integer, ForeignKey("sources.source_id"), nullable=False)
+    company_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("companies.company_id"), nullable=False)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
-    company: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
     parsed_desc: Mapped[dict] = mapped_column(JSON, nullable=True)  # {required_skills: [], nice_to_have: []}
     url: Mapped[str] = mapped_column(Text, nullable=False)
@@ -25,6 +25,7 @@ class Job(Base):
     posted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
 
     source: Mapped["Source"] = relationship(back_populates="jobs")
+    company: Mapped["Company"] = relationship(back_populates="jobs")
     job_scores: Mapped[list["JobScore"]] = relationship(back_populates="job", cascade="all, delete-orphan")
     evaluations: Mapped[list["Evaluation"]] = relationship(back_populates="job", cascade="all, delete-orphan")
     tailored_resumes: Mapped[list["TailoredResume"]] = relationship(back_populates="job", cascade="all, delete-orphan")

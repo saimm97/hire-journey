@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     # Web client id from Google Cloud Console; empty disables the feature.
     google_client_id: str = ""
 
+    # AI — set at least one key; providers are tried in order: Groq → Gemini → OpenAI
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.3-70b-versatile"
     # Uploads
     max_upload_mb: int = 5
 
@@ -25,7 +28,9 @@ class Settings(BaseSettings):
 
     # AI
     gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash"
     openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
 
 
 settings = Settings()

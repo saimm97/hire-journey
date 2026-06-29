@@ -5,22 +5,45 @@
 # Greenhouse: https://boards-api.greenhouse.io/v1/boards/{slug}/jobs
 # Ashby:      https://api.ashbyhq.com/posting-api/job-board/{slug}
 # Lever:      https://api.lever.co/v0/postings/{slug}
+#
+# 16 companies use custom career pages (no public ATS API) and are excluded:
+# OpenAI, Retool, LivePerson, Talkdesk, Twilio, Dialpad, Gong, Genesys,
+# Salesforce, Langfuse, Cognigy, Make.com, Semios, Hugging Face, Zep AI, Maxim AI
 
 companies:
-  # -- AI Labs --
+
+  # ── Greenhouse (36) ──────────────────────────────────────────
+
+  # AI Labs
   - name: Anthropic
     source: greenhouse
     slug: anthropic
 
-  - name: Cohere
-    source: ashby
-    slug: cohere
+  - name: Black Forest Labs
+    source: greenhouse
+    slug: blackforestlabs
 
-  - name: Mistral AI
-    source: lever
-    slug: mistral
+  - name: Stability AI
+    source: greenhouse
+    slug: stabilityai
 
-  # -- Voice AI --
+  - name: Isomorphic Labs
+    source: greenhouse
+    slug: isomorphiclabs
+
+  - name: PhysicsX
+    source: greenhouse
+    slug: physicsx
+
+  - name: Runway
+    source: greenhouse
+    slug: runwayml
+
+  - name: Helsing
+    source: greenhouse
+    slug: helsing
+
+  # Voice AI
   - name: PolyAI
     source: greenhouse
     slug: polyai
@@ -33,11 +56,44 @@ companies:
     source: greenhouse
     slug: humeai
 
-  # -- AI-native Platforms --
+  - name: Speechmatics
+    source: greenhouse
+    slug: speechmatics
+
+  # AI-native Platforms
   - name: Intercom
     source: greenhouse
     slug: intercom
 
+  - name: Glean
+    source: greenhouse
+    slug: gleanwork
+
+  - name: Arize AI
+    source: greenhouse
+    slug: arizeai
+
+  - name: Hightouch
+    source: greenhouse
+    slug: hightouch
+
+  - name: Celonis
+    source: greenhouse
+    slug: celonis
+
+  - name: Amplemarket
+    source: greenhouse
+    slug: amplemarket
+
+  - name: Ada
+    source: greenhouse
+    slug: ada
+
+  - name: Safari AI
+    source: greenhouse
+    slug: safariai
+
+  # Developer Tools & Infrastructure
   - name: Airtable
     source: greenhouse
     slug: airtable
@@ -50,85 +106,312 @@ companies:
     source: greenhouse
     slug: temporal
 
-  - name: Arize AI
-    source: greenhouse
-    slug: arizeai
-
-  - name: Glean
-    source: greenhouse
-    slug: gleanwork
-
   - name: RunPod
     source: greenhouse
     slug: runpod
 
+  - name: PlanetScale
+    source: greenhouse
+    slug: planetscale
+
+  - name: Contentful
+    source: greenhouse
+    slug: contentful
+
+  # Fintech & Other
+  - name: Hootsuite
+    source: greenhouse
+    slug: hootsuite
+
+  - name: Factorial
+    source: greenhouse
+    slug: factorial
+
+  - name: Later
+    source: greenhouse
+    slug: later
+
+  - name: Boomi
+    source: greenhouse
+    slug: boomilp
+
+  - name: N26
+    source: greenhouse
+    slug: n26
+
+  - name: Trade Republic
+    source: greenhouse
+    slug: traderepublicbank
+
+  - name: SumUp
+    source: greenhouse
+    slug: sumup
+
+  - name: Scandit
+    source: greenhouse
+    slug: scandit
+
+  - name: GetYourGuide
+    source: greenhouse
+    slug: getyourguide
+
+  - name: HelloFresh
+    source: greenhouse
+    slug: hellofresh
+
+  - name: Wayve
+    source: greenhouse
+    slug: wayve
+
+
+  # ── Ashby (34) ───────────────────────────────────────────────
+
+  # Voice AI
+  - name: ElevenLabs
+    source: ashby
+    slug: elevenlabs
+
+  - name: Deepgram
+    source: ashby
+    slug: deepgram
+
+  - name: Vapi
+    source: ashby
+    slug: vapi
+
+  - name: Bland AI
+    source: ashby
+    slug: bland
+
+  # AI Agents & Automation
+  - name: Sierra
+    source: ashby
+    slug: sierra
+
+  - name: Decagon
+    source: ashby
+    slug: decagon
+
+  - name: Lindy
+    source: ashby
+    slug: lindy
+
+  - name: Lovable
+    source: ashby
+    slug: lovable
+
+  - name: Clay Labs
+    source: ashby
+    slug: claylabs
+
+  - name: Perplexity
+    source: ashby
+    slug: perplexity
+
+  # AI Infrastructure & Tooling
+  - name: Cohere
+    source: ashby
+    slug: cohere
+
+  - name: LangChain
+    source: ashby
+    slug: langchain
+
+  - name: Pinecone
+    source: ashby
+    slug: pinecone
+
+  - name: Aleph Alpha
+    source: ashby
+    slug: AlephAlpha
+
+  - name: Lakera
+    source: ashby
+    slug: lakera.ai
+
+  - name: Glacis AI
+    source: ashby
+    slug: glacis-ai
+
+  - name: Photoroom
+    source: ashby
+    slug: photoroom
+
+  - name: Synthesia
+    source: ashby
+    slug: synthesia
+
+  - name: Cradle
+    source: ashby
+    slug: cradlebio
+
+  - name: Faculty
+    source: ashby
+    slug: faculty
+
+  - name: Causaly
+    source: ashby
+    slug: causaly
+
+  # Developer Tools & Infrastructure
   - name: n8n
     source: ashby
     slug: n8n
 
   - name: Zapier
-    source: greenhouse
+    source: ashby
     slug: zapier
 
-  # -- Developer Tools --
-  - name: Linear
+  - name: Tinybird
     source: ashby
-    slug: linear
+    slug: tinybird
 
-  - name: Notion
-    source: greenhouse
-    slug: notion
+  - name: Attio
+    source: ashby
+    slug: attio
 
-  - name: Figma
-    source: greenhouse
-    slug: figma
+  - name: WorkOS
+    source: ashby
+    slug: workos
 
-  - name: Loom
-    source: greenhouse
-    slug: loom
+  - name: Supabase
+    source: ashby
+    slug: supabase
 
-  - name: Descript
-    source: greenhouse
-    slug: descript
+  - name: Resend
+    source: ashby
+    slug: resend
 
-# Title filter — applied after fetching, before storing.
-# A job must match at least one positive keyword AND zero negative keywords.
+  - name: Clerk
+    source: ashby
+    slug: clerk
+
+  - name: Inngest
+    source: ashby
+    slug: inngest
+
+  # European AI
+  - name: DeepL
+    source: ashby
+    slug: DeepL
+
+  - name: Travelperk
+    source: ashby
+    slug: travelperk
+
+  - name: Legora
+    source: ashby
+    slug: legora
+
+  - name: Klue
+    source: ashby
+    slug: klue
+
+
+  # ── Lever (10) ───────────────────────────────────────────────
+
+  - name: Mistral AI
+    source: lever
+    slug: mistral
+
+  - name: Weights & Biases
+    source: lever
+    slug: wandb
+
+  - name: Palantir
+    source: lever
+    slug: palantir
+
+  - name: Spotify
+    source: lever
+    slug: spotify
+
+  - name: Sanctuary AI
+    source: lever
+    slug: sanctuary
+
+  - name: Clarity AI
+    source: lever
+    slug: clarity-ai
+
+  - name: Qonto
+    source: lever
+    slug: qonto
+
+  - name: Forto
+    source: lever
+    slug: forto
+
+  - name: Pigment
+    source: lever
+    slug: pigment
+
+  - name: Vinted
+    source: lever
+    slug: vinted
+
+
+# ── Filters ──────────────────────────────────────────────────────
+# Applied after fetching, before storing.
+
 title_filter:
   positive:
+    # AI / ML
     - "AI"
     - "ML"
     - "Machine Learning"
-    - "Python"
-    - "Full Stack"
     - "LLM"
     - "Agent"
     - "GenAI"
     - "NLP"
     - "MLOps"
-    - "Platform Engineer"
-    - "Backend"
+    - "Data Scientist"
+    # General Engineering
     - "Software Engineer"
+    - "Software Developer"
+    - "Full Stack"
+    - "Fullstack"
+    - "Frontend"
+    - "Front-end"
+    - "Backend"
+    - "Back-end"
+    - "Platform Engineer"
+    - "Infrastructure"
+    - "DevOps"
+    - "SRE"
+    - "Site Reliability"
+    - "Cloud Engineer"
+    # Languages / frameworks commonly in job titles
+    - "Python"
+    - "TypeScript"
+    - "React"
+    - "Node"
+    - "Go "
+    - "Rust"
+    # Data
+    - "Data Engineer"
+    - "Analytics Engineer"
+    # Solutions / Deployment
     - "Solutions Engineer"
     - "Forward Deployed"
+    - "Solutions Architect"
   negative:
     - "Intern"
     - "Junior"
-    - ".NET"
-    - "Java "
-    - "iOS"
-    - "Android"
     - "Sales"
     - "Marketing"
     - "Recruiter"
+    - "HR"
+    - "Finance"
+    - "Legal"
+    - "Accountant"
+    - "Office Manager"
 
-# Location filter — case-insensitive substring match.
-# Empty location on a job always passes.
 location_filter:
   allow:
     - "Remote"
     - "United States"
     - "United Kingdom"
-    - "Pakistan"
     - "Dubai"
     - "London"
     - "New York"
@@ -138,4 +421,3 @@ location_filter:
     - "Singapore"
     - "Japan"
     - "Brazil"
-    - "Australia"
