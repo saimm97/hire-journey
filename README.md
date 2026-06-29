@@ -1,4 +1,4 @@
-# Career Engine
+# Hire Journey
 
 End-to-end AI-powered job search platform. Upload your resume, discover relevant jobs from top ATS boards, get scored recommendations, deep CV evaluations, and tailored applications.
 
@@ -7,13 +7,13 @@ End-to-end AI-powered job search platform. Upload your resume, discover relevant
 - **Backend:** FastAPI, SQLAlchemy 2.0 (async), Alembic, PostgreSQL
 - **AI:** LangGraph agents
 - **Job Sources:** Greenhouse, Ashby, Lever  (ATS Job Boards, free-to-use)
-- **Frontend:** Next.js (coming soon)
+- **Frontend:** static HTML/CSS/JS (sign-in/up, CV upload); Next.js planned
 
 ---
 
 ## Prerequisites
 
-- Python 3.13+
+- Python 3.13 (3.11–3.13 supported; **3.14 is not yet supported** — several dependencies have no wheels for it and fail to build)
 - Docker
 - Git
 
@@ -93,19 +93,22 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 
 ```bash
 cd backend
-python3.13 -m venv .venv
-source .venv/bin/activate      # macOS/Linux
+python3.13 -m venv .venv         # use a 3.13 interpreter (see Prerequisites)
+source .venv/bin/activate        # macOS/Linux
 pip install -r requirements-dev.txt
 ```
 
 ### 6. Run migrations
 
+Migrations are committed to the repo, so a fresh setup only needs to apply them:
+
 ```bash
-alembic revision --autogenerate -m "initial schema"
 alembic upgrade head
 ```
 
-### 7. Start the server
+(You only run `alembic revision --autogenerate` later, after changing a model — see [Day-to-day commands](#day-to-day-commands).)
+
+### 7. Start the backend
 
 ```bash
 uvicorn app.main:app --reload
@@ -113,6 +116,19 @@ uvicorn app.main:app --reload
 
 Server runs at [http://localhost:8000](http://localhost:8000)
 Interactive API docs at [http://localhost:8000/docs](http://localhost:8000/docs)
+
+### 8. Start the frontend
+
+The frontend is static — no build step. Serve it from its own directory in a second terminal:
+
+```bash
+cd frontend
+python3 -m http.server 5500
+```
+
+Open [http://localhost:5500](http://localhost:5500). It calls the backend at `http://localhost:8000`, configured in `frontend/config.js`.
+
+> **Google sign-in (optional):** set `GOOGLE_CLIENT_ID` in `backend/.env`, then add `http://localhost:5500` to your OAuth client's **Authorized JavaScript origins** in Google Cloud Console. Leave the variable blank to hide the button.
 
 ---
 
@@ -198,7 +214,7 @@ career-engine/
 │   ├── alembic/           # Database migrations
 │   ├── tests/
 │   └── pyproject.toml
-└── frontend/              # Next.js (coming soon)
+└── frontend/              # static sign-in/up + CV upload (config.js, strings.js, app.js)
 ```
 
 ---
@@ -211,6 +227,8 @@ career-engine/
 | `DATABASE_URL`                | Yes      | PostgreSQL connection string           |
 | `SECRET_KEY`                  | Yes      | JWT signing secret — keep this private |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | No       | Token expiry, default 60               |
+| `GOOGLE_CLIENT_ID`            | No       | OAuth Web client id for "Continue with Google"; blank disables it |
+| `MAX_UPLOAD_MB`               | No       | Max CV upload size in MB, default 5    |
 | `GEMINI_API_KEY`              | Yes      | Gemini API key for AI features         |
 | `OPENAI_API_KEY`              | No       | Optional OpenAI fallback               |
 

@@ -19,6 +19,14 @@ class Settings(BaseSettings):
     # AI — set at least one key; providers are tried in order: Groq → Gemini → OpenAI
     groq_api_key: str = ""
     groq_model: str = "llama-3.3-70b-versatile"
+    # Uploads
+    max_upload_mb: int = 5
+
+    @property
+    def max_upload_bytes(self) -> int:
+        return self.max_upload_mb * 1024 * 1024
+
+    # AI
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.0-flash"
     openai_api_key: str = ""

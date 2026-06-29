@@ -8,13 +8,11 @@ from app import messages
 from app.api.deps import get_current_user
 from app.config import settings
 from app.database import get_db
-from app.google_oauth import GoogleAuthError
+from app.exceptions import GoogleAuthError, InvalidCredentialsError, UserAlreadyExistsError
 from app.models.user import User
 from app.schemas.auth import AuthConfig, GoogleAuthRequest, Token, UserCreate, UserRead
 from app.security import create_access_token
 from app.services.auth_service import (
-    InvalidCredentialsError,
-    UserAlreadyExistsError,
     authenticate_google_user,
     authenticate_user,
     register_user,
