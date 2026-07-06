@@ -1,17 +1,23 @@
 'use client'
 
 import { GoogleLogin, type CredentialResponse } from '@react-oauth/google'
+import { useRouter } from 'next/navigation'
+
 import { googleLogin } from '@/lib/api/auth'
+import { useAuth } from '@/lib/auth/AuthContext'
 
 export default function Login() {
+  const router = useRouter()
+  const { login } = useAuth()
+
   async function handleSuccess(response: CredentialResponse) {
     const credential = response.credential
     if (!credential) return
 
     try {
       const token = await googleLogin(credential)
-      // TEMP: next step stores this JWT and redirects into the app.
-      console.log('Our JWT:', token.access_token)
+      await login(token.access_token)
+      router.push('/')
     } catch (err) {
       console.error('Login failed:', err)
     }
