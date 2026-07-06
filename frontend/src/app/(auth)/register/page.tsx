@@ -41,7 +41,7 @@ const FIELD =
   'h-11 rounded-lg border-brand-border bg-white shadow-sm placeholder:text-brand-muted/60 focus-visible:border-brand-violet focus-visible:ring-2 focus-visible:ring-brand-violet/25'
 
 function strengthOf(pw: string): number {
-  if (!pw) return 0
+  if (!pw) return 0;
   let s = 0
   if (pw.length >= 8) s++
   if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) s++
