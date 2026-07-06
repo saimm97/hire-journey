@@ -4,6 +4,21 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Hire Journey brand tokens (from the Stitch design system) — reused across screens. */
+@theme {
+  --color-brand-paper: #fbf8f4;
+  --color-brand-surface: #f3eee7;
+  --color-brand-ink: #231f1c;
+  --color-brand-muted: #7a736b;
+  --color-brand-border: #e7e1d8;
+  --color-brand-violet: #6d3fe0;
+  --color-brand-violet-dark: #541cc7;
+  --color-brand-coral: #ff6a3d;
+  --color-brand-coral-dark: #e55a30;
+  --color-brand-emerald: #0fb582;
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
