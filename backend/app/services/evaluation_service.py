@@ -52,10 +52,7 @@ async def run_evaluation(
 
     skills: list[str] = []
     if resume.parsed_content:
-        skills = [
-            s.get("name", "") for s in resume.parsed_content.get("skills", [])
-            if s.get("name")
-        ]
+        skills = [s for s in resume.parsed_content.get("skills", []) if isinstance(s, str)]
 
     result = await evaluate_job(
         resume_text=resume.raw_content or "",

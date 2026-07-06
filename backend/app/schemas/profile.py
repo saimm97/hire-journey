@@ -3,30 +3,47 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-from app.schemas.project import ProjectRead
+from app.schemas.project import ParsedProject, ProjectRead
 
 
-class CVExtraction(BaseModel):
+class ExperienceItem(BaseModel):
+    company: str | None = None
+    title: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    highlights: list[str] = Field(default_factory=list)
+
+
+class EducationItem(BaseModel):
+    institution: str | None = None
+    degree: str | None = None
+    field: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+
+
+class ResumeExtraction(BaseModel):
+    """Structured resume data the LLM must return for an uploaded document."""
+
     first_name: str | None = None
     last_name: str | None = None
     email: EmailStr | None = None
     phone: str | None = None
     linkedin_url: str | None = None
     github_url: str | None = None
-    tech_stack: list[str] = []
+    portfolio_url: str | None = None
     summary: str | None = None
+    skills: list[str] = Field(default_factory=list)
+    experience: list[ExperienceItem] = Field(default_factory=list)
+    education: list[EducationItem] = Field(default_factory=list)
+    projects: list[ParsedProject] = Field(default_factory=list)
 
-
-class LinkedInExtraction(BaseModel):
-    first_name: str | None = None
-    last_name: str | None = None
-    email: EmailStr | None = None
-    phone: str | None = None
-    linkedin_url: str | None = None
-    tech_stack: list[str] = []
-    linkedin_summary: str | None = None
+    @field_validator("email", mode="before")
+    @classmethod
+    def _blank_to_none(cls, value: object) -> object:
+        return value or None
 
 
 class ProfileRead(BaseModel):
@@ -51,12 +68,4 @@ class ProfileRead(BaseModel):
 class CVUploadResult(BaseModel):
     profile: ProfileRead
     resume_summary: str | None
-    projects: list[ProjectRead]
-
-
-class LinkedInUploadResult(BaseModel):
-    profile: ProfileRead
-
-
-class ProjectsUploadResult(BaseModel):
     projects: list[ProjectRead]
