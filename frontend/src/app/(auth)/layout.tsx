@@ -27,18 +27,23 @@ const SPINE: SpineNode[] = [
 function JourneySpine() {
   return (
     <div className="relative mt-4">
-      {/* track */}
-      <div className="absolute left-0 top-4 h-1 w-full -translate-y-1/2 rounded-full bg-brand-border" />
-      <div className="absolute left-0 top-4 h-1 w-[35%] -translate-y-1/2 rounded-full bg-gradient-to-r from-brand-coral to-brand-violet" />
+      {/* Track Background */}
+      <div className="absolute left-4 right-4 top-4 h-[3px] -translate-y-1/2 rounded-full bg-brand-border">
+        {/* Track Active Progress (33.33% reaches the center of the 3rd node "Search") */}
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-brand-emerald to-brand-coral"
+          style={{ width: '33.33%' }}
+        />
+      </div>
       <ol className="relative flex items-start justify-between">
         {SPINE.map(({ label, icon: Icon, state }) => (
           <li key={label} className="flex flex-col items-center gap-2">
             <span
               className={cn(
-                'flex h-8 w-8 items-center justify-center rounded-full',
+                'flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300',
                 state === 'done' && 'bg-brand-emerald text-white shadow-sm',
                 state === 'current' &&
-                  'bg-brand-coral text-white shadow-md ring-4 ring-brand-coral/20 motion-safe:animate-pulse',
+                  'bg-brand-coral text-white shadow-md ring-4 ring-brand-coral/25 scale-105',
                 state === 'upcoming' && 'border-2 border-brand-border bg-white text-brand-muted',
               )}
             >
@@ -46,7 +51,7 @@ function JourneySpine() {
             </span>
             <span
               className={cn(
-                'font-mono text-[11px] tracking-wide',
+                'font-mono text-[11px] tracking-wide transition-colors duration-300',
                 state === 'current' ? 'font-semibold text-brand-coral' : 'text-brand-muted',
               )}
             >
