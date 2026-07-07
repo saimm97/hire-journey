@@ -1,18 +1,14 @@
 """LLM-powered job evaluation agent.
 
-Ports the evaluation logic into a single structured
-LangChain call. Produces a match score plus actionable strengths, weaknesses,
-and recommendations calibrated to the specific candidate–job pair.
-
-Provider priority (first configured key wins, then falls back in order):
-  1. Groq  — llama-3.3-70b-versatile (fast, free tier)
-  2. Gemini — gemini-2.0-flash
-  3. OpenAI — gpt-4o-mini
+Runs the evaluation as a single structured LLM call, producing a match score
+plus actionable strengths, weaknesses, and recommendations calibrated to the
+specific candidate-job pair. Provider selection and retries are handled by
+:mod:`app.utils.llm`.
 """
 
 from pydantic import BaseModel, Field
 
-from app.config import settings
+from app.utils import llm
 
 _SYSTEM_PROMPT = """\
 You are an expert technical recruiter and career coach evaluating how well a \
@@ -88,27 +84,6 @@ def _build_user_message(
     )
 
 
-def _build_providers() -> list:
-    """Return LLM instances for every configured provider, in priority order."""
-    providers = []
-    if settings.groq_api_key:
-        from langchain_groq import ChatGroq
-        providers.append(ChatGroq(
-            model=settings.groq_model, temperature=0.3, api_key=settings.groq_api_key,
-        ))
-    if settings.gemini_api_key:
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        providers.append(ChatGoogleGenerativeAI(
-            model=settings.gemini_model, temperature=0.3, google_api_key=settings.gemini_api_key,
-        ))
-    if settings.openai_api_key:
-        from langchain_openai import ChatOpenAI
-        providers.append(ChatOpenAI(
-            model=settings.openai_model, temperature=0.3, api_key=settings.openai_api_key,
-        ))
-    return providers
-
-
 async def evaluate_job(
     resume_text: str,
     skills: list[str],
@@ -117,26 +92,6 @@ async def evaluate_job(
     location: str | None,
     description: str,
 ) -> EvaluationResult:
-    """Run the LLM evaluation. Tries providers in order: Groq → Gemini → OpenAI.
-
-    Raises RuntimeError if all configured providers fail or none are configured.
-    """
-    providers = _build_providers()
-    if not providers:
-        raise RuntimeError(
-            "No LLM API key configured. Set GROQ_API_KEY, GEMINI_API_KEY, "
-            "or OPENAI_API_KEY in .env"
-        )
-
-    messages = [("system", _SYSTEM_PROMPT), ("human", _build_user_message(
-        resume_text, skills, job_title, company, location, description,
-    ))]
-
-    last_err: Exception | None = None
-    for llm in providers:
-        try:
-            return await llm.with_structured_output(EvaluationResult).ainvoke(messages)
-        except Exception as exc:
-            last_err = exc
-
-    raise RuntimeError(f"All LLM providers failed. Last error: {last_err}") from last_err
+    """Run the LLM evaluation. Raises ExtractionError if extraction fails."""
+    user = _build_user_message(resume_text, skills, job_title, company, location, description)
+    return await llm.structured_extract(_SYSTEM_PROMPT, user, EvaluationResult, temperature=0.3)

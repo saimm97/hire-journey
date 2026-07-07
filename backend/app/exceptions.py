@@ -22,9 +22,9 @@ class GoogleAuthError(Exception):
     """Google sign-in could not be completed."""
 
 
-class PdfUnreadableError(Exception):
-    """The bytes could not be opened or read as a PDF."""
+class DocumentParseError(Exception):
+    """An uploaded document could not be read as text (unsupported, corrupt, or empty)."""
 
 
-class PdfNoTextError(Exception):
-    """The PDF opened but contained no extractable text."""
+class ExtractionError(Exception):
+    """The LLM could not return schema-valid structured data, or none is configured."""

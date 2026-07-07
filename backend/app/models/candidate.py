@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func, text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSON, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -26,6 +26,8 @@ class Candidate(Base):
     phone: Mapped[str | None] = mapped_column(String(50))
     github_url: Mapped[str | None] = mapped_column(String(255))
     portfolio_url: Mapped[str | None] = mapped_column(String(255))
+    # Professional summary, editable by the user; seeded from the parsed CV.
+    summary: Mapped[str | None] = mapped_column(Text)
     minimum_salary: Mapped[int | None] = mapped_column(Integer)
     tech_stack: Mapped[list[str] | None] = mapped_column(ARRAY(String))
     # The full parsed LinkedIn export (URL + all parsed fields), set by the

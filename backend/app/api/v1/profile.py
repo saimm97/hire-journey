@@ -1,4 +1,4 @@
-"""Profile endpoints: build the user's profile from uploaded documents."""
+"""Profile endpoint: build the user's profile from an uploaded resume document."""
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,47 +7,41 @@ from app import messages
 from app.api.deps import get_current_user
 from app.config import settings
 from app.database import get_db
-from app.exceptions import PdfNoTextError, PdfUnreadableError
+from app.exceptions import DocumentParseError, ExtractionError
+from app.models.candidate import Candidate
+from app.models.project import Project
 from app.models.user import User
-from app.schemas.profile import (
-    CVUploadResult,
-    LinkedInUploadResult,
-    ProfileRead,
-    ProjectsUploadResult,
-)
-from app.schemas.project import ProjectRead
-from app.services import pdf, profile_service
+from app.schemas.profile import CVUploadResult, ProfileRead, ProfileUpdate
+from app.schemas.project import ParsedProject, ProjectRead
+from app.services import profile_service
+from app.utils.document_parser import SUPPORTED_EXTENSIONS
 
 router = APIRouter()
 
 
-async def _validate_pdf(file: UploadFile) -> bytes:
+async def _read_document(file: UploadFile) -> bytes:
     if file.size and file.size > settings.max_upload_bytes:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=messages.file_too_large(settings.max_upload_mb),
         )
-    data = await file.read()
-    if not pdf.is_pdf(data):
+    if not (file.filename or "").lower().endswith(SUPPORTED_EXTENSIONS):
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=messages.PDF_REQUIRED,
+            detail=messages.DOCUMENT_REQUIRED,
         )
-    return data
+    return await file.read()
 
 
-def _pdf_error_handler(exc: Exception) -> None:
-    if isinstance(exc, PdfUnreadableError):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=messages.PDF_UNREADABLE,
-        )
-    if isinstance(exc, PdfNoTextError):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=messages.PDF_NO_TEXT,
-        )
-    raise exc
+def _snapshot(
+    candidate: Candidate, projects: list[Project], summary: str | None
+) -> CVUploadResult:
+    """Assemble the profile snapshot returned by both upload and read."""
+    return CVUploadResult(
+        profile=ProfileRead.model_validate(candidate),
+        resume_summary=summary,
+        projects=[ProjectRead.model_validate(p) for p in projects],
+    )
 
 
 @router.post("/cv", response_model=CVUploadResult, status_code=status.HTTP_201_CREATED)
@@ -56,43 +50,50 @@ async def upload_cv(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CVUploadResult:
-    data = await _validate_pdf(file)
+    data = await _read_document(file)
     try:
         profile, projects, summary = await profile_service.process_cv(
             db, current_user.user_id, file.filename or "cv.pdf", data
         )
-        return CVUploadResult(
-            profile=ProfileRead.model_validate(profile),
-            resume_summary=summary,
-            projects=[ProjectRead.model_validate(p) for p in projects],
+    except DocumentParseError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    except ExtractionError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+
+    return _snapshot(profile, projects, summary)
+
+
+@router.patch("", response_model=ProfileRead)
+async def update_profile(
+    payload: ProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Candidate:
+    """Persist edited profile fields to the candidate and return the updated profile."""
+    return await profile_service.update_candidate(
+        db, current_user.user_id, payload.model_dump(exclude_unset=True)
+    )
+
+
+@router.get("", response_model=CVUploadResult)
+async def read_profile(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CVUploadResult:
+    """Return the onboarding snapshot: profile, active-resume summary, and CV projects."""
+    snapshot = await profile_service.get_profile(db, current_user.user_id)
+    if snapshot is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=messages.PROFILE_NOT_FOUND
         )
-    except Exception as exc:
-        _pdf_error_handler(exc)
+    return _snapshot(*snapshot)
 
 
-@router.post("/linkedin", response_model=LinkedInUploadResult, status_code=status.HTTP_201_CREATED)
-async def upload_linkedin(
-    file: UploadFile = File(...),
+@router.put("/projects", response_model=list[ProjectRead])
+async def replace_cv_projects(
+    projects: list[ParsedProject],
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> LinkedInUploadResult:
-    data = await _validate_pdf(file)
-    try:
-        candidate = await profile_service.process_linkedin(db, current_user.user_id, data)
-        return LinkedInUploadResult(profile=ProfileRead.model_validate(candidate))
-    except Exception as exc:
-        _pdf_error_handler(exc)
-
-
-@router.post("/projects", response_model=ProjectsUploadResult, status_code=status.HTTP_201_CREATED)
-async def upload_projects(
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ProjectsUploadResult:
-    data = await _validate_pdf(file)
-    try:
-        projects = await profile_service.process_projects_pdf(db, current_user.user_id, data)
-        return ProjectsUploadResult(projects=[ProjectRead.model_validate(p) for p in projects])
-    except Exception as exc:
-        _pdf_error_handler(exc)
+) -> list[Project]:
+    """Replace the user's CV-sourced projects with the edited set and return them."""
+    return await profile_service.set_projects(db, current_user.user_id, projects)
