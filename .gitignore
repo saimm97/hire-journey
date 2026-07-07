@@ -225,3 +225,8 @@ __marimo__/
 /lib
 
 PRD.md
+
+# --- Monorepo fix ---
+# The Python "lib/" packaging rule above otherwise swallows the frontend's real
+# source directory (frontend/src/lib). Keep it tracked.
+!frontend/src/lib/
