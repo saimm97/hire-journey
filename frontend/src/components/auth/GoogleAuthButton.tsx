@@ -19,8 +19,8 @@ export function GoogleAuthButton() {
     const credential = response.credential
     if (!credential) return
     try {
-      const token = await googleLogin(credential)
-      await login(token.access_token)
+      await googleLogin(credential)
+      await login()
       router.push('/')
     } catch (err) {
       console.error('Google login failed:', err)

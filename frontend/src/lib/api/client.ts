@@ -14,23 +14,20 @@ export class ApiError extends Error {
 type RequestOptions = {
   method?: string
   body?: unknown
-  token?: string | null
   form?: boolean
 }
 
 /**
  * Single entry point for every backend call. Prepends the API base + version,
- * attaches the bearer token when present, and normalizes errors so callers
- * only ever deal with `ApiError`.
+ * and normalizes errors so callers only ever deal with `ApiError`.
  */
 export async function apiRequest<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const { method = 'GET', body, token, form = false } = options
+  const { method = 'GET', body, form = false } = options
 
   const headers: Record<string, string> = {}
-  if (token) headers.Authorization = `Bearer ${token}`
 
   let payload: BodyInit | undefined
   if (body !== undefined) {
@@ -43,7 +40,12 @@ export async function apiRequest<T>(
     }
   }
 
-  const res = await fetch(`${BASE_URL}/api/v1${path}`, { method, headers, body: payload })
+  const res = await fetch(`${BASE_URL}/api/v1${path}`, {
+    method,
+    headers,
+    body: payload,
+    credentials: 'include',
+  })
 
   if (!res.ok) {
     let detail = res.statusText

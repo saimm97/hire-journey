@@ -46,8 +46,8 @@ export default function Login() {
 
   async function onSubmit(values: FormValues) {
     try {
-      const token = await loginWithPassword(values.identifier, values.password)
-      await login(token.access_token)
+      await loginWithPassword(values.identifier, values.password)
+      await login()
       router.push('/')
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'Something went wrong'

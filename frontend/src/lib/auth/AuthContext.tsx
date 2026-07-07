@@ -2,14 +2,13 @@
 
 import { createContext, useContext, useEffect, useState } from 'react'
 
-import { getMe, type User } from '@/lib/api/auth'
-import { clearToken, getToken, setToken } from '@/lib/auth/storage'
+import { getMe, logoutUser, type User } from '@/lib/api/auth'
 
 type AuthContextValue = {
   user: User | null
   loading: boolean
-  login: (token: string) => Promise<void>
-  logout: () => void
+  login: () => Promise<void>
+  logout: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -18,28 +17,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Hydrate on mount: a stored token means a session may exist, so resolve it
-  // to the current user via /auth/me. A stale token (401) is cleared.
+  // Hydrate on mount: check if the browser has a valid HTTP cookie
+  // session by querying the /auth/me endpoint.
   useEffect(() => {
-    const token = getToken()
-    if (!token) {
-      setLoading(false)
-      return
-    }
-    getMe(token)
+    getMe()
       .then(setUser)
-      .catch(() => clearToken())
+      .catch(() => setUser(null))
       .finally(() => setLoading(false))
   }, [])
 
-  async function login(token: string) {
-    setToken(token)
-    setUser(await getMe(token))
+  async function login() {
+    setUser(await getMe())
   }
 
-  function logout() {
-    clearToken()
-    setUser(null)
+  async function logout() {
+    try {
+      await logoutUser()
+    } catch (e) {
+      console.error('Failed to log out on server:', e)
+    } finally {
+      setUser(null)
+    }
   }
 
   return (

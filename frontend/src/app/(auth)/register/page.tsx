@@ -68,8 +68,8 @@ export default function Register() {
   async function onSubmit(values: FormValues) {
     try {
       await registerUser(values) // 1. create account
-      const token = await loginWithPassword(values.email, values.password) // 2. auto-login
-      await login(token.access_token) // 3. store + hydrate session
+      await loginWithPassword(values.email, values.password) // 2. auto-login
+      await login() // 3. hydrate session
       router.push('/')
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'Something went wrong'

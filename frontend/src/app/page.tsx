@@ -3,7 +3,6 @@
 import { Loader2, LogOut } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/lib/auth/AuthContext'
@@ -12,14 +11,8 @@ export default function Home() {
   const router = useRouter()
   const { user, loading, logout } = useAuth()
 
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login')
-    }
-  }, [user, loading, router])
-
-  function handleLogout() {
-    logout() // clear token + auth state (stateless JWT — no backend call)
+  async function handleLogout() {
+    await logout() // clear session cookie on backend and reset client state
     router.push('/login')
   }
 

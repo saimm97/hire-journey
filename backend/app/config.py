@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     secret_key: str
     access_token_expire_minutes: int = 60
     algorithm: str = "HS256"
+    cookie_secure: bool = False
 
     # CORS — comma-separated list of allowed frontend origins.
     cors_origins: str = "http://localhost:3000"

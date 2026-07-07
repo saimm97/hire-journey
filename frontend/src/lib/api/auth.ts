@@ -22,9 +22,14 @@ export function googleLogin(credential: string): Promise<Token> {
   })
 }
 
-/** Resolve a JWT to the current user. Throws ApiError(401) if the token is stale. */
-export function getMe(token: string): Promise<User> {
-  return apiRequest<User>('/auth/me', { token })
+/** Resolve the current session cookie to the logged-in user. Throws ApiError(401) if no valid session. */
+export function getMe(): Promise<User> {
+  return apiRequest<User>('/auth/me')
+}
+
+/** Clear the session cookie on the backend. */
+export function logoutUser(): Promise<void> {
+  return apiRequest<void>('/auth/logout', { method: 'POST' })
 }
 
 /** Create an account. Returns the new user — does NOT log them in (no token). */
