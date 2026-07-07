@@ -18,7 +18,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { passwordLogin, registerUser } from '@/lib/api/auth'
+import { loginWithPassword, registerUser } from '@/lib/api/auth'
 import { ApiError } from '@/lib/api/client'
 import { useAuth } from '@/lib/auth/AuthContext'
 import { cn } from '@/lib/utils'
@@ -68,7 +68,7 @@ export default function Register() {
   async function onSubmit(values: FormValues) {
     try {
       await registerUser(values) // 1. create account
-      const token = await passwordLogin(values.email, values.password) // 2. auto-login
+      const token = await loginWithPassword(values.email, values.password) // 2. auto-login
       await login(token.access_token) // 3. store + hydrate session
       router.push('/')
     } catch (err) {

@@ -46,18 +46,6 @@ export function GoogleAuthButton() {
           width="384"
         />
       </div>
-
-      <p className="mt-8 text-center text-xs text-brand-muted">
-        By continuing, you agree to the Hire Journey{' '}
-        <a className="text-brand-violet hover:underline" href="#">
-          Terms of Service
-        </a>{' '}
-        and{' '}
-        <a className="text-brand-violet hover:underline" href="#">
-          Privacy Policy
-        </a>
-        .
-      </p>
     </div>
   )
 }

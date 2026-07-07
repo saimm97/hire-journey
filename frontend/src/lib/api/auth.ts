@@ -40,7 +40,7 @@ export function registerUser(data: {
  * Email/username + password login. The backend uses OAuth2PasswordRequestForm,
  * so this must be form-encoded with the identifier under the `username` field.
  */
-export function passwordLogin(identifier: string, password: string): Promise<Token> {
+export function loginWithPassword(identifier: string, password: string): Promise<Token> {
   return apiRequest<Token>('/auth/login', {
     method: 'POST',
     form: true,

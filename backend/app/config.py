@@ -12,6 +12,13 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60
     algorithm: str = "HS256"
 
+    # CORS — comma-separated list of allowed frontend origins.
+    cors_origins: str = "http://localhost:3000"
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
     # Google OAuth ("Continue with Google"). The client id is the OAuth 2.0
     # Web client id from Google Cloud Console; empty disables the feature.
     google_client_id: str = ""

@@ -18,7 +18,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { passwordLogin } from '@/lib/api/auth'
+import { loginWithPassword } from '@/lib/api/auth'
 import { ApiError } from '@/lib/api/client'
 import { useAuth } from '@/lib/auth/AuthContext'
 import { cn } from '@/lib/utils'
@@ -46,7 +46,7 @@ export default function Login() {
 
   async function onSubmit(values: FormValues) {
     try {
-      const token = await passwordLogin(values.identifier, values.password)
+      const token = await loginWithPassword(values.identifier, values.password)
       await login(token.access_token)
       router.push('/')
     } catch (err) {
