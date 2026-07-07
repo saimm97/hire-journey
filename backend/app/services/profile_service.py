@@ -67,7 +67,8 @@ async def get_profile(
             select(Resume).where(Resume.user_id == user_id, Resume.is_active.is_(True))
         )
     ).scalar_one_or_none()
-    summary = (resume.parsed_content or {}).get("summary") if resume else None
+    parsed_summary = (resume.parsed_content or {}).get("summary") if resume else None
+    summary = candidate.summary or parsed_summary
     return candidate, await _load_cv_projects(db, user_id), summary
 
 
@@ -98,6 +99,8 @@ def _candidate_values(extraction: ResumeExtraction) -> dict:
     fields = {name: data[name] for name in _CANDIDATE_FIELDS if data.get(name)}
     if extraction.skills:
         fields["tech_stack"] = extraction.skills
+    if extraction.summary:
+        fields["summary"] = extraction.summary
     return fields
 
 

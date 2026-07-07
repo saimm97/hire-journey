@@ -74,6 +74,7 @@ class ProfileUpdate(BaseModel):
     phone: str | None = None
     github_url: str | None = None
     portfolio_url: str | None = None
+    summary: str | None = None
     tech_stack: list[str] | None = None
     desired_role: list[str] | None = None
     minimum_salary: int | None = Field(default=None, ge=0)

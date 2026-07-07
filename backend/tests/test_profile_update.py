@@ -65,3 +65,14 @@ async def test_patch_persists_job_preferences(client: AsyncClient, test_user: Us
     stored = await load_candidate(test_user.user_id)
     assert stored.desired_role == ["ML Engineer", "Backend Engineer"]
     assert stored.minimum_salary == 120000
+
+
+async def test_patch_persists_summary(client: AsyncClient, test_user: User) -> None:
+    """PATCH writes the editable professional summary, and GET reads it back."""
+    await seed_candidate(test_user.user_id, first_name="Ada")
+
+    response = await client.patch(PROFILE_URL, json={"summary": "Backend engineer, 6 years."})
+
+    assert response.status_code == 200
+    snapshot = (await client.get(PROFILE_URL)).json()
+    assert snapshot["resume_summary"] == "Backend engineer, 6 years."
