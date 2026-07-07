@@ -32,6 +32,54 @@ async def upsert_candidate(db: AsyncSession, user_id: uuid.UUID, fields: dict) -
     await db.execute(statement)
 
 
+async def update_candidate(
+    db: AsyncSession, user_id: uuid.UUID, fields: dict
+) -> Candidate:
+    """Persist a partial candidate update and return the refreshed row."""
+    await upsert_candidate(db, user_id, fields)
+    await db.commit()
+    return (
+        await db.execute(select(Candidate).where(Candidate.user_id == user_id))
+    ).scalar_one()
+
+
+async def _load_cv_projects(db: AsyncSession, user_id: uuid.UUID) -> list[Project]:
+    """Return the user's CV-sourced projects, oldest first."""
+    result = await db.execute(
+        select(Project)
+        .where(Project.user_id == user_id, Project.source == ProjectSource.CV)
+        .order_by(Project.created_at)
+    )
+    return list(result.scalars().all())
+
+
+async def get_profile(
+    db: AsyncSession, user_id: uuid.UUID
+) -> tuple[Candidate, list[Project], str | None] | None:
+    """Load the candidate with its active-resume summary and CV projects, or None if absent."""
+    candidate = (
+        await db.execute(select(Candidate).where(Candidate.user_id == user_id))
+    ).scalar_one_or_none()
+    if candidate is None:
+        return None
+    resume = (
+        await db.execute(
+            select(Resume).where(Resume.user_id == user_id, Resume.is_active.is_(True))
+        )
+    ).scalar_one_or_none()
+    summary = (resume.parsed_content or {}).get("summary") if resume else None
+    return candidate, await _load_cv_projects(db, user_id), summary
+
+
+async def set_projects(
+    db: AsyncSession, user_id: uuid.UUID, projects: list[ParsedProject]
+) -> list[Project]:
+    """Replace the user's CV-sourced projects with the provided set and return them."""
+    await replace_projects(db, user_id, projects, ProjectSource.CV)
+    await db.commit()
+    return await _load_cv_projects(db, user_id)
+
+
 async def replace_projects(
     db: AsyncSession, user_id: uuid.UUID, projects: list[ParsedProject], source: str
 ) -> None:
@@ -94,11 +142,4 @@ async def process_cv(
     candidate = (
         await db.execute(select(Candidate).where(Candidate.user_id == user_id))
     ).scalar_one()
-    stored_projects = (
-        await db.execute(
-            select(Project)
-            .where(Project.user_id == user_id, Project.source == ProjectSource.CV)
-            .order_by(Project.created_at)
-        )
-    ).scalars().all()
-    return candidate, list(stored_projects), extraction.summary
+    return candidate, await _load_cv_projects(db, user_id), extraction.summary

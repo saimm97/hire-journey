@@ -8,9 +8,11 @@ from app.api.deps import get_current_user
 from app.config import settings
 from app.database import get_db
 from app.exceptions import DocumentParseError, ExtractionError
+from app.models.candidate import Candidate
+from app.models.project import Project
 from app.models.user import User
-from app.schemas.profile import CVUploadResult, ProfileRead
-from app.schemas.project import ProjectRead
+from app.schemas.profile import CVUploadResult, ProfileRead, ProfileUpdate
+from app.schemas.project import ParsedProject, ProjectRead
 from app.services import profile_service
 from app.utils.document_parser import SUPPORTED_EXTENSIONS
 
@@ -31,6 +33,17 @@ async def _read_document(file: UploadFile) -> bytes:
     return await file.read()
 
 
+def _snapshot(
+    candidate: Candidate, projects: list[Project], summary: str | None
+) -> CVUploadResult:
+    """Assemble the profile snapshot returned by both upload and read."""
+    return CVUploadResult(
+        profile=ProfileRead.model_validate(candidate),
+        resume_summary=summary,
+        projects=[ProjectRead.model_validate(p) for p in projects],
+    )
+
+
 @router.post("/cv", response_model=CVUploadResult, status_code=status.HTTP_201_CREATED)
 async def upload_cv(
     file: UploadFile = File(...),
@@ -47,8 +60,40 @@ async def upload_cv(
     except ExtractionError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
 
-    return CVUploadResult(
-        profile=ProfileRead.model_validate(profile),
-        resume_summary=summary,
-        projects=[ProjectRead.model_validate(p) for p in projects],
+    return _snapshot(profile, projects, summary)
+
+
+@router.patch("", response_model=ProfileRead)
+async def update_profile(
+    payload: ProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Candidate:
+    """Persist edited profile fields to the candidate and return the updated profile."""
+    return await profile_service.update_candidate(
+        db, current_user.user_id, payload.model_dump(exclude_unset=True)
     )
+
+
+@router.get("", response_model=CVUploadResult)
+async def read_profile(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CVUploadResult:
+    """Return the onboarding snapshot: profile, active-resume summary, and CV projects."""
+    snapshot = await profile_service.get_profile(db, current_user.user_id)
+    if snapshot is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=messages.PROFILE_NOT_FOUND
+        )
+    return _snapshot(*snapshot)
+
+
+@router.put("/projects", response_model=list[ProjectRead])
+async def replace_cv_projects(
+    projects: list[ParsedProject],
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[Project]:
+    """Replace the user's CV-sourced projects with the edited set and return them."""
+    return await profile_service.set_projects(db, current_user.user_id, projects)

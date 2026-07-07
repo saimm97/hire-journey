@@ -14,6 +14,8 @@ GOOGLE_ACCOUNT_FAILED = "Could not create account from Google sign-in."
 
 DOCUMENT_REQUIRED = "Uploaded file must be a PDF or DOCX document."
 
+PROFILE_NOT_FOUND = "No profile found. Upload a CV to get started."
+
 
 def already_registered(field: str) -> str:
     return f"That {field} is already registered."

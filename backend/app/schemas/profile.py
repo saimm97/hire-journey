@@ -65,6 +65,32 @@ class ProfileRead(BaseModel):
     updated_at: datetime
 
 
+class ProfileUpdate(BaseModel):
+    """User-editable candidate fields; keys left unset are unchanged on PATCH."""
+
+    first_name: str | None = None
+    last_name: str | None = None
+    email: EmailStr | None = None
+    phone: str | None = None
+    github_url: str | None = None
+    portfolio_url: str | None = None
+    tech_stack: list[str] | None = None
+    desired_role: list[str] | None = None
+    minimum_salary: int | None = Field(default=None, ge=0)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def _blank_to_none(cls, value: object) -> object:
+        """Treat an empty email string as an explicit clear."""
+        return value or None
+
+    @field_validator("desired_role")
+    @classmethod
+    def _null_roles_to_empty(cls, value: list[str] | None) -> list[str]:
+        """Coerce an explicit null to an empty list; the column is non-nullable."""
+        return value if value is not None else []
+
+
 class CVUploadResult(BaseModel):
     profile: ProfileRead
     resume_summary: str | None
