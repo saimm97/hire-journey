@@ -20,12 +20,17 @@ _STOP_WORDS = {
     "the", "and", "for", "with", "that", "this", "are", "you", "your",
     "our", "will", "have", "has", "not", "but", "from", "they", "their",
     "all", "can", "its", "was", "been", "one", "who", "may", "any", "use",
+    # 2-letter noise words. Needed because the tokenizer keeps 2-char tokens so
+    # domain terms like AI, ML, Go, QA, UX survive — those are intentionally NOT
+    # listed here, so only the genuine function words below get filtered.
+    "in", "to", "of", "or", "is", "at", "as", "by", "an", "be", "it",
+    "on", "so", "if", "no", "up", "us", "we", "he", "me", "my", "do",
 }
 
 
 def _tokenize(text: str) -> set[str]:
     return {
-        w for w in re.findall(r"\b[a-z]{3,}\b", text.lower())
+        w for w in re.findall(r"\b[a-z]{2,}\b", text.lower())
         if w not in _STOP_WORDS
     }
 
