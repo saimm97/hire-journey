@@ -7,7 +7,7 @@ export function proxy(request: NextRequest) {
   const hasToken = request.cookies.has('access_token')
   const { pathname } = request.nextUrl
 
-  const isGuestRoute = GUEST_ONLY_ROUTES.some(route => pathname.startsWith(route))
+  const isGuestRoute = GUEST_ONLY_ROUTES.includes(pathname)
 
   // 1. Redirect unauthenticated users to /login
   if (!hasToken && !isGuestRoute) {
