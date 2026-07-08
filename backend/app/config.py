@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60
     algorithm: str = "HS256"
 
+    # Background pipeline — how often the scheduled job scan runs, in hours.
+    # (In-process scheduler; runs in every app instance — keep to one instance.)
+    scan_interval_hours: float = 2.0
+
     # Google OAuth ("Continue with Google"). The client id is the OAuth 2.0
     # Web client id from Google Cloud Console; empty disables the feature.
     google_client_id: str = ""
