@@ -16,20 +16,11 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from app.config import settings
+from app.services import pipeline_service
 
 logger = logging.getLogger(__name__)
 
 _scheduler: AsyncIOScheduler | None = None
-
-
-async def run_pipeline() -> None:
-    """One scheduled pipeline run.
-
-    Placeholder for now — it only proves the timer fires. Real work comes next:
-      Step A: collect jobs from all ATS boards  -> upsert into `jobs`
-      Step B: score saved jobs per active user  -> upsert into `job_scores`
-    """
-    logger.info("pipeline tick — scheduler fired run_pipeline()")
 
 
 def start_scheduler() -> None:
@@ -40,7 +31,7 @@ def start_scheduler() -> None:
 
     _scheduler = AsyncIOScheduler()
     _scheduler.add_job(
-        run_pipeline,
+        pipeline_service.run_pipeline,
         trigger=IntervalTrigger(hours=settings.scan_interval_hours),
         id="job_pipeline",
         next_run_time=datetime.now(timezone.utc),  # also run once right after boot

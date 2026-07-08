@@ -8,7 +8,10 @@ from app.sources.base import RawJob, TIMEOUT, _HTML_TAG
 GREENHOUSE_LIST_API = "https://boards-api.greenhouse.io/v1/boards/{slug}/jobs"
 GREENHOUSE_JOB_API = "https://boards-api.greenhouse.io/v1/boards/{slug}/jobs/{job_id}"
 
-_JOB_ID_RE = re.compile(r"/jobs/(\d+)")
+# Greenhouse job id appears in two URL shapes: the standard boards URL
+# (".../jobs/12345") and custom career pages that carry it as a query param
+# ("company.com/careers/?gh_jid=12345"). Match either.
+_JOB_ID_RE = re.compile(r"(?:/jobs/|gh_jid=)(\d+)")
 
 
 class GreenhouseSource:
