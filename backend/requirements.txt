@@ -37,5 +37,8 @@ langchain==0.3.30
 langgraph==0.6.11
 langchain-google-genai==2.1.12
 
+# Background scheduler (in-process job pipeline timer)
+APScheduler==3.10.4
+
 # Utilities
 pyyaml==6.0.2

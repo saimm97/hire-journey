@@ -1,31 +1,43 @@
 """Keyword overlap scoring for bulk job ranking.
 
-Scores each job 0–100 against a set of keywords derived from the user's search
-terms and resume skills. No LLM, no external calls — purely deterministic.
+Scores each job 0–100 against keywords derived from the user's search terms and
+resume skills. No LLM, no external calls — purely deterministic.
 
 Scoring logic:
-  - Title hit = 3x weight (a keyword in the job title is a stronger signal)
-  - Description hit = 1x weight
-  - Score = (weighted hits) / (max possible weighted hits), scaled to 0–100
-  - Capped at 100 even if description adds hits beyond what title alone could score
-
-This intentionally favours jobs where the user's keywords appear in the title,
-which are almost always more relevant than jobs where they only appear buried in
-a 500-word description.
+  - Title match = 3x weight, description match = 1x weight (a keyword in the
+    title is a stronger signal than one buried in a long description).
+  - The weighted match count is passed through a saturating curve, so matching a
+    handful of your terms already scores high. Crucially, the score depends on
+    HOW MANY of your terms a job matches — not what FRACTION of all your terms it
+    covers — so listing more preferences no longer drags every score down.
+  - Search terms drive the base (0–80); resume skills add a bonus (0–20).
 """
 
+import math
 import re
 
 _STOP_WORDS = {
     "the", "and", "for", "with", "that", "this", "are", "you", "your",
     "our", "will", "have", "has", "not", "but", "from", "they", "their",
     "all", "can", "its", "was", "been", "one", "who", "may", "any", "use",
+    # 2-letter noise words. Needed because the tokenizer keeps 2-char tokens so
+    # domain terms like AI, ML, Go, QA, UX survive — those are intentionally NOT
+    # listed here, so only the genuine function words below get filtered.
+    "in", "to", "of", "or", "is", "at", "as", "by", "an", "be", "it",
+    "on", "so", "if", "no", "up", "us", "we", "he", "me", "my", "do",
 }
+
+# Saturation constants: how many (weighted) matches it takes to approach the max.
+# The curve is 1 - exp(-matches / SCALE), so a few strong matches already score
+# high and the score never depends on the total number of terms searched.
+# Higher = needs more matches to saturate.
+_MATCH_SCALE = 8.0   # search-term matches (weighted: title×3 + description×1)
+_SKILL_SCALE = 4.0   # resume-skill matches
 
 
 def _tokenize(text: str) -> set[str]:
     return {
-        w for w in re.findall(r"\b[a-z]{3,}\b", text.lower())
+        w for w in re.findall(r"\b[a-z]{2,}\b", text.lower())
         if w not in _STOP_WORDS
     }
 
@@ -42,10 +54,10 @@ def keyword_score(
     Resume skills add a bonus (0–20) for jobs that match the user's background
     even beyond what they explicitly searched for.
 
-    Keeping them separate prevents resume skills from diluting the denominator
-    and making all scores artificially low.
+    Both are scored by a saturating curve on the match COUNT, so a rich profile
+    (many terms/skills) is not penalised — matching several of them well scores
+    high regardless of how many were listed.
     """
-    # --- Base score: search terms (0–80) ---
     search_tokens: set[str] = set()
     for term in search_terms:
         search_tokens |= _tokenize(term.lower())
@@ -56,20 +68,19 @@ def keyword_score(
     title_tokens = _tokenize(title)
     desc_tokens = _tokenize(description)
 
-    title_hits = len(search_tokens & title_tokens) * 3
-    desc_hits = len(search_tokens & desc_tokens)
-    max_possible = len(search_tokens) * 3
-
-    base = int((title_hits + desc_hits) / max_possible * 80)
+    # --- Base score: search terms (0–80) ---
+    # Weighted match count — title matches count 3×. Independent of len(terms).
+    weighted = 3 * len(search_tokens & title_tokens) + len(search_tokens & desc_tokens)
+    base = 80 * (1 - math.exp(-weighted / _MATCH_SCALE))
 
     # --- Bonus: resume skills (0–20) ---
-    bonus = 0
+    bonus = 0.0
     if resume_skills:
         skill_tokens: set[str] = set()
         for skill in resume_skills:
             skill_tokens |= _tokenize(skill.lower())
         if skill_tokens:
-            skill_hits = len(skill_tokens & (title_tokens | desc_tokens))
-            bonus = int(skill_hits / len(skill_tokens) * 20)
+            skill_matches = len(skill_tokens & (title_tokens | desc_tokens))
+            bonus = 20 * (1 - math.exp(-skill_matches / _SKILL_SCALE))
 
-    return min(100, base + bonus)
+    return min(100, int(base + bonus))

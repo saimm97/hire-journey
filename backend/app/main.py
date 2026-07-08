@@ -1,9 +1,21 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1 import router as api_router
+from app.scheduler import start_scheduler, stop_scheduler
 
-app = FastAPI(title="Career Engine", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start the background job-pipeline timer on boot; stop it on shutdown.
+    start_scheduler()
+    yield
+    stop_scheduler()
+
+
+app = FastAPI(title="Career Engine", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
