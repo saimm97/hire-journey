@@ -59,7 +59,10 @@ class ProfileRead(BaseModel):
     minimum_salary: int | None
     tech_stack: list[str] | None
     desired_role: list[str]
-    linkedin_data: dict | None
+    seniority_level: list[str]
+    location: list[str]
+    work_mode: str | None
+    open_to_relocating: bool
     source_resume_id: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
@@ -77,6 +80,10 @@ class ProfileUpdate(BaseModel):
     summary: str | None = None
     tech_stack: list[str] | None = None
     desired_role: list[str] | None = None
+    seniority_level: list[str] | None = None
+    location: list[str] | None = None
+    work_mode: str | None = None
+    open_to_relocating: bool | None = None
     minimum_salary: int | None = Field(default=None, ge=0)
 
     @field_validator("email", mode="before")
@@ -85,10 +92,10 @@ class ProfileUpdate(BaseModel):
         """Treat an empty email string as an explicit clear."""
         return value or None
 
-    @field_validator("desired_role")
+    @field_validator("desired_role", "seniority_level", "location")
     @classmethod
-    def _null_roles_to_empty(cls, value: list[str] | None) -> list[str]:
-        """Coerce an explicit null to an empty list; the column is non-nullable."""
+    def _null_list_to_empty(cls, value: list[str] | None) -> list[str]:
+        """Coerce an explicit null to an empty list; these columns are non-nullable."""
         return value if value is not None else []
 
 
