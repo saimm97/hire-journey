@@ -2,8 +2,8 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func, text
-from sqlalchemy.dialects.postgresql import ARRAY, JSON, UUID
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func, text
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -26,15 +26,24 @@ class Candidate(Base):
     phone: Mapped[str | None] = mapped_column(String(50))
     github_url: Mapped[str | None] = mapped_column(String(255))
     portfolio_url: Mapped[str | None] = mapped_column(String(255))
+    # Editable profile blurb, seeded from the parsed CV summary.
+    summary: Mapped[str | None] = mapped_column(Text)
     minimum_salary: Mapped[int | None] = mapped_column(Integer)
     tech_stack: Mapped[list[str] | None] = mapped_column(ARRAY(String))
-    # The full parsed LinkedIn export (URL + all parsed fields), set by the
-    # LinkedIn endpoint. Self-contained, so there is no flat linkedin_url column.
-    linkedin_data: Mapped[dict | None] = mapped_column(JSON)
-    # Required: the roles the user is targeting. Defaults to an empty array so a
-    # candidate auto-created from a CV upload is valid; set via the profile endpoint.
+    # Job-preference fields, set via the profile PATCH endpoint. Array-valued
+    # preferences default to empty so a candidate auto-created from a CV is valid.
     desired_role: Mapped[list[str]] = mapped_column(
         ARRAY(String), nullable=False, server_default=text("'{}'")
+    )
+    location: Mapped[list[str]] = mapped_column(
+        ARRAY(String), nullable=False, server_default=text("'{}'")
+    )
+    seniority_level: Mapped[list[str]] = mapped_column(
+        ARRAY(String), nullable=False, server_default=text("'{}'")
+    )
+    work_mode: Mapped[str | None] = mapped_column(String(20))
+    open_to_relocating: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
     )
     source_resume_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("resumes.resume_id", ondelete="SET NULL")

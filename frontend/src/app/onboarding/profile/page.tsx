@@ -1,5 +1,7 @@
 "use client"
 
+import { useRouter } from "next/navigation"
+
 import { JourneySpine } from "@/components/onboarding/JourneySpine"
 import { ProfileForm } from "@/components/onboarding/ProfileForm"
 import { ResumeDropzone } from "@/components/onboarding/ResumeDropzone"
@@ -7,9 +9,16 @@ import { Toast } from "@/components/onboarding/Toast"
 import { WizardFooter } from "@/components/onboarding/WizardFooter"
 import { useProfileOnboarding } from "@/hooks/useProfileOnboarding"
 
+const NEXT_ROUTE = "/onboarding/preferences"
+
 export default function ProfileOnboardingPage() {
   const state = useProfileOnboarding()
+  const router = useRouter()
   const showForm = state.status === "ready"
+
+  const saveAndContinue = async () => {
+    if (await state.saveAndContinue()) router.push(NEXT_ROUTE)
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-brand-paper">
@@ -44,7 +53,7 @@ export default function ProfileOnboardingPage() {
         <WizardFooter
           note="Your edits save to your profile."
           saving={state.saving}
-          onSave={state.saveAndContinue}
+          onSave={saveAndContinue}
         />
       )}
 

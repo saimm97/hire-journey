@@ -37,7 +37,13 @@ export function ProfileForm({ state }: { state: OnboardingState }) {
       <LinksFields identity={state.identity} onChange={state.setIdentityField} />
       <SkillsEditor skills={state.skills} onAdd={state.addSkill} onRemove={state.removeSkill} />
       <ResumeSummary summary={state.summary} onChange={state.setSummaryText} />
-      <ProjectList projects={state.projects} onOpen={setOpenProject} onRemove={state.removeProject} />
+      <ProjectList
+        projects={state.projects}
+        onOpen={setOpenProject}
+        onRemove={state.removeProject}
+        onUploadPdf={state.uploadProjects}
+        uploading={state.parsingProjects}
+      />
 
       {openProject && (
         <ProjectDialog

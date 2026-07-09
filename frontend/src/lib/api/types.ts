@@ -8,10 +8,14 @@ export interface Profile {
   phone: string | null
   github_url: string | null
   portfolio_url: string | null
+  summary: string | null
   minimum_salary: number | null
   tech_stack: string[] | null
   desired_role: string[]
-  linkedin_data: Record<string, unknown> | null
+  seniority_level: string[]
+  location: string[]
+  work_mode: string | null
+  open_to_relocating: boolean
   source_resume_id: string | null
   created_at: string
   updated_at: string
@@ -44,13 +48,22 @@ export interface ProfileUpdate {
   portfolio_url?: string | null
   summary?: string | null
   tech_stack?: string[]
+  /** Job-preference fields. Backed columns; the PATCH is partial (exclude_unset). */
+  desired_role?: string[]
+  seniority_level?: string[]
+  minimum_salary?: number | null
+  location?: string[]
+  work_mode?: string | null
+  open_to_relocating?: boolean
 }
 
-/** A project payload for replacing the CV project set (mirror of ParsedProject). */
+/** A project payload for replacing the whole project set (mirror of ProjectInput). */
 export interface ProjectInput {
   name: string
   summary?: string | null
   tech_stack?: string[]
   github_url?: string | null
   deployed_url?: string | null
+  /** Origin of the project, preserved across the full-set replace. */
+  source: string
 }

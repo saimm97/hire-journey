@@ -1,6 +1,7 @@
 "use client"
 
-import { Code2, Link2, Pencil, Trash2 } from "lucide-react"
+import { useRef } from "react"
+import { Code2, Link2, Loader2, Pencil, Trash2, UploadCloud } from "lucide-react"
 
 import type { Project } from "@/lib/api/types"
 import { Section } from "./Section"
@@ -9,24 +10,63 @@ interface ProjectListProps {
   projects: Project[]
   onOpen: (project: Project) => void
   onRemove: (projectId: string) => void
+  onUploadPdf: (file: File) => void
+  uploading: boolean
 }
 
-/** CV projects as cards. Clicking a card opens it for editing; hidden when empty. */
-export function ProjectList({ projects, onOpen, onRemove }: ProjectListProps) {
-  if (projects.length === 0) return null
+/** Parsed projects as editable cards, with a button to add more from a projects PDF. */
+export function ProjectList({ projects, onOpen, onRemove, onUploadPdf, uploading }: ProjectListProps) {
   return (
-    <Section title="Projects we found">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {projects.map((project) => (
-          <ProjectCard
-            key={project.project_id}
-            project={project}
-            onOpen={() => onOpen(project)}
-            onRemove={() => onRemove(project.project_id)}
-          />
-        ))}
-      </div>
+    <Section
+      title="Projects we found"
+      action={<UploadPdfButton onFile={onUploadPdf} uploading={uploading} />}
+    >
+      {projects.length === 0 ? (
+        <p className="text-sm text-brand-muted">
+          No projects yet — upload a projects PDF to add some.
+        </p>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {projects.map((project) => (
+            <ProjectCard
+              key={project.project_id}
+              project={project}
+              onOpen={() => onOpen(project)}
+              onRemove={() => onRemove(project.project_id)}
+            />
+          ))}
+        </div>
+      )}
     </Section>
+  )
+}
+
+function UploadPdfButton({ onFile, uploading }: { onFile: (file: File) => void; uploading: boolean }) {
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".pdf,.docx"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          if (file) onFile(file)
+          event.target.value = ""
+        }}
+      />
+      <button
+        type="button"
+        onClick={() => !uploading && inputRef.current?.click()}
+        disabled={uploading}
+        className="inline-flex items-center gap-1 rounded px-2 py-1 font-mono text-[11px] uppercase text-brand-violet hover:bg-brand-violet/10 disabled:opacity-60"
+      >
+        {uploading ? <Loader2 className="size-3.5 animate-spin" /> : <UploadCloud className="size-3.5" />}
+        {uploading ? "Reading…" : "Upload PDF"}
+      </button>
+    </>
   )
 }
 

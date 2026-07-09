@@ -42,7 +42,10 @@ const toProjectInput = (project: Project): ProjectInput => ({
   tech_stack: project.tech_stack ?? [],
   github_url: project.github_url,
   deployed_url: project.deployed_url,
+  source: project.source,
 })
+
+const PROJECTS_PDF_SOURCE = "projects_pdf"
 
 const messageOf = (error: unknown): string =>
   error instanceof ApiError ? error.message : "Something went wrong. Try again."
@@ -66,6 +69,7 @@ export function useProfileOnboarding() {
   const [summary, setSummary] = useState<string | null>(null)
   const [projects, setProjects] = useState<Project[]>([])
   const [saving, setSaving] = useState(false)
+  const [parsingProjects, setParsingProjects] = useState(false)
   const [toast, setToast] = useState<Toast | null>(null)
 
   const hydrate = useCallback((snapshot: ProfileSnapshot) => {
@@ -120,6 +124,32 @@ export function useProfileOnboarding() {
     },
     [hydrate],
   )
+
+  const uploadProjects = useCallback(async (file: File) => {
+    const invalid = validateFile(file)
+    if (invalid) {
+      setToast({ variant: "error", message: invalid })
+      return
+    }
+    setParsingProjects(true)
+    try {
+      const parsed = await profileApi.uploadProjects(file)
+      setProjects((prev) => [
+        ...prev.filter((p) => p.source !== PROJECTS_PDF_SOURCE),
+        ...parsed,
+      ])
+      setToast({
+        variant: "success",
+        message: parsed.length
+          ? `Added ${parsed.length} project${parsed.length === 1 ? "" : "s"} from your PDF.`
+          : "No projects found in that PDF.",
+      })
+    } catch (error) {
+      setToast({ variant: "error", message: messageOf(error) })
+    } finally {
+      setParsingProjects(false)
+    }
+  }, [])
 
   const setIdentityField = useCallback((key: keyof Identity, value: string) => {
     setIdentity((prev) => ({ ...prev, [key]: value }))
@@ -186,6 +216,7 @@ export function useProfileOnboarding() {
     summary,
     projects,
     saving,
+    parsingProjects,
     toast,
     setIdentityField,
     setSummaryText,
@@ -194,6 +225,7 @@ export function useProfileOnboarding() {
     removeProject,
     updateProject,
     uploadCv,
+    uploadProjects,
     reupload,
     saveAndContinue,
     dismissToast: useCallback(() => setToast(null), []),
