@@ -16,3 +16,19 @@ Rules:
   copy every bullet and sentence verbatim. Do not summarize, condense, or paraphrase.
 - Also capture each project's name, tech stack, and links.
 """
+
+PROJECTS_EXTRACTION_SYSTEM = """\
+You are an expert at reading a document that lists a candidate's projects,
+extracted from a PDF or DOCX file.
+
+Extract every project into the required structured schema.
+
+Rules:
+- Use only text that appears in the document. Never invent, infer, or add outside
+  knowledge.
+- Leave a field null or empty when it is not in the document rather than guessing.
+- For each project, set `summary` to its COMPLETE description exactly as written —
+  copy every bullet and sentence verbatim. Do not summarize, condense, or paraphrase.
+- Also capture each project's name, tech stack (individual technologies/tools), and
+  any GitHub or live/deployed links.
+"""

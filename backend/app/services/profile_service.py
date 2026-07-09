@@ -11,7 +11,7 @@ from app.models.candidate import Candidate
 from app.models.project import Project, ProjectSource
 from app.models.resume import Resume
 from app.schemas.profile import ResumeExtraction
-from app.schemas.project import ParsedProject
+from app.schemas.project import ParsedProject, ProjectInput, ProjectsExtraction
 from app.utils import document_parser, llm, prompts
 
 _CANDIDATE_FIELDS = (
@@ -43,20 +43,21 @@ async def update_candidate(
     ).scalar_one()
 
 
-async def _load_cv_projects(db: AsyncSession, user_id: uuid.UUID) -> list[Project]:
-    """Return the user's CV-sourced projects, oldest first."""
-    result = await db.execute(
-        select(Project)
-        .where(Project.user_id == user_id, Project.source == ProjectSource.CV)
-        .order_by(Project.created_at)
-    )
+async def _load_projects(
+    db: AsyncSession, user_id: uuid.UUID, source: str | None = None
+) -> list[Project]:
+    """Return the user's projects (all sources, or just one) oldest first."""
+    query = select(Project).where(Project.user_id == user_id)
+    if source is not None:
+        query = query.where(Project.source == source)
+    result = await db.execute(query.order_by(Project.created_at))
     return list(result.scalars().all())
 
 
 async def get_profile(
     db: AsyncSession, user_id: uuid.UUID
 ) -> tuple[Candidate, list[Project], str | None] | None:
-    """Load the candidate with its active-resume summary and CV projects, or None if absent."""
+    """Load the candidate with its active-resume summary and all projects, or None if absent."""
     candidate = (
         await db.execute(select(Candidate).where(Candidate.user_id == user_id))
     ).scalar_one_or_none()
@@ -69,16 +70,26 @@ async def get_profile(
     ).scalar_one_or_none()
     parsed_summary = (resume.parsed_content or {}).get("summary") if resume else None
     summary = candidate.summary or parsed_summary
-    return candidate, await _load_cv_projects(db, user_id), summary
+    return candidate, await _load_projects(db, user_id), summary
 
 
 async def set_projects(
-    db: AsyncSession, user_id: uuid.UUID, projects: list[ParsedProject]
+    db: AsyncSession, user_id: uuid.UUID, projects: list[ProjectInput]
 ) -> list[Project]:
-    """Replace the user's CV-sourced projects with the provided set and return them."""
-    await replace_projects(db, user_id, projects, ProjectSource.CV)
-    await db.commit()
-    return await _load_cv_projects(db, user_id)
+    """Replace the user's entire project set with the edited list and return it.
+
+    Unlike :func:`replace_projects`, this spans all sources: the client sends the
+    full edited set (CV + projects-PDF), so edits, deletions, and each item's
+    ``source`` all persist in one write.
+    """
+    try:
+        await db.execute(delete(Project).where(Project.user_id == user_id))
+        db.add_all(Project(user_id=user_id, **project.model_dump()) for project in projects)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
+    return await _load_projects(db, user_id)
 
 
 async def replace_projects(
@@ -107,7 +118,8 @@ def _candidate_values(extraction: ResumeExtraction) -> dict:
 async def process_cv(
     db: AsyncSession, user_id: uuid.UUID, file_name: str, data: bytes
 ) -> tuple[Candidate, list[Project], str | None]:
-    """Parse a CV, extract structured fields, and persist across resume, candidate, and project tables.
+    """Parse a CV, extract structured fields, and persist them to the resume,
+    candidate, and project tables.
 
     Parsing and extraction run before any write; the resume insert, candidate upsert, and
     project replacement share one transaction so all three commit together or not at all.
@@ -145,4 +157,26 @@ async def process_cv(
     candidate = (
         await db.execute(select(Candidate).where(Candidate.user_id == user_id))
     ).scalar_one()
-    return candidate, await _load_cv_projects(db, user_id), extraction.summary
+    # All sources, so a re-upload keeps any projects added from a projects PDF.
+    return candidate, await _load_projects(db, user_id), extraction.summary
+
+
+async def process_projects_pdf(
+    db: AsyncSession, user_id: uuid.UUID, file_name: str, data: bytes
+) -> list[Project]:
+    """Parse a projects document with the LLM and replace the user's projects_pdf projects.
+
+    Reuses the CV pipeline (``document_parser`` + schema-validated LLM extraction);
+    only the projects table is touched, so CV-sourced projects are left untouched.
+    """
+    text = await anyio.to_thread.run_sync(document_parser.to_text, data, file_name)
+    extraction = await llm.structured_extract(
+        prompts.PROJECTS_EXTRACTION_SYSTEM, text, ProjectsExtraction
+    )
+    try:
+        await replace_projects(db, user_id, extraction.projects, ProjectSource.PROJECTS_PDF)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
+    return await _load_projects(db, user_id, ProjectSource.PROJECTS_PDF)

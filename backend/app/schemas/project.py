@@ -11,11 +11,30 @@ class ParsedProject(BaseModel):
     name: str
     summary: str | None = Field(
         default=None,
-        description="The project's full description, copied verbatim from the resume — not summarized.",
+        description=(
+            "The project's full description, copied verbatim from the resume — "
+            "not summarized."
+        ),
     )
     tech_stack: list[str] = []
     github_url: str | None = None
     deployed_url: str | None = None
+
+
+class ProjectInput(ParsedProject):
+    """An edited project sent back to replace the stored set.
+
+    Carries its own ``source`` (``"cv"`` / ``"projects_pdf"``) so the full-set
+    replacement keeps each project's origin.
+    """
+
+    source: str = "cv"
+
+
+class ProjectsExtraction(BaseModel):
+    """The structured projects the LLM must return for an uploaded projects document."""
+
+    projects: list[ParsedProject] = Field(default_factory=list)
 
 
 class ProjectRead(BaseModel):
@@ -28,3 +47,7 @@ class ProjectRead(BaseModel):
     github_url: str | None
     deployed_url: str | None
     source: str
+
+
+class ProjectsUploadResult(BaseModel):
+    projects: list[ProjectRead]

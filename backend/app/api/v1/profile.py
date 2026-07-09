@@ -12,7 +12,7 @@ from app.models.candidate import Candidate
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.profile import CVUploadResult, ProfileRead, ProfileUpdate
-from app.schemas.project import ParsedProject, ProjectRead
+from app.schemas.project import ProjectInput, ProjectRead, ProjectsUploadResult
 from app.services import profile_service
 from app.utils.document_parser import SUPPORTED_EXTENSIONS
 
@@ -90,10 +90,34 @@ async def read_profile(
 
 
 @router.put("/projects", response_model=list[ProjectRead])
-async def replace_cv_projects(
-    projects: list[ParsedProject],
+async def replace_projects(
+    projects: list[ProjectInput],
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[Project]:
-    """Replace the user's CV-sourced projects with the edited set and return them."""
+    """Replace the user's entire project set (all sources) with the edited set."""
     return await profile_service.set_projects(db, current_user.user_id, projects)
+
+
+@router.post(
+    "/projects/upload",
+    response_model=ProjectsUploadResult,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_projects(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ProjectsUploadResult:
+    """Parse a projects PDF/DOCX with the LLM and replace the user's projects_pdf projects."""
+    data = await _read_document(file)
+    try:
+        projects = await profile_service.process_projects_pdf(
+            db, current_user.user_id, file.filename or "projects.pdf", data
+        )
+    except DocumentParseError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    except ExtractionError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+
+    return ProjectsUploadResult(projects=[ProjectRead.model_validate(p) for p in projects])
