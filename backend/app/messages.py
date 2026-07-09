@@ -12,6 +12,8 @@ GOOGLE_EMAIL_UNVERIFIED = "Google email is not verified; cannot link account."
 GOOGLE_ACCOUNT_FAILED = "Could not create account from Google sign-in."
 
 
+PROFILE_NOT_FOUND = "No profile yet. Upload a CV to get started."
+
 PDF_REQUIRED = "Uploaded file must be a PDF."
 PDF_UNREADABLE = "The PDF could not be read; it may be corrupt or password-protected."
 PDF_NO_TEXT = "No text could be extracted from the PDF (scanned images are not supported)."

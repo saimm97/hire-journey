@@ -26,6 +26,15 @@ export const profileApi = {
     return apiClient.postForm<ProfileSnapshot>("/profile/cv", form)
   },
 
+  /** Upload a projects PDF; reuses the CV parser and returns the parsed projects. */
+  uploadProjects(file: File): Promise<Project[]> {
+    const form = new FormData()
+    form.append("file", file)
+    return apiClient
+      .postForm<{ projects: Project[] }>("/profile/projects/upload", form)
+      .then((result) => result.projects)
+  },
+
   /** Persist edited identity + skills, returning the updated profile. */
   update(patch: ProfileUpdate): Promise<Profile> {
     return apiClient.patch<Profile>("/profile", patch)

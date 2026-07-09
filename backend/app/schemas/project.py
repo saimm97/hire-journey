@@ -15,6 +15,21 @@ class ParsedProject(BaseModel):
     deployed_url: str | None = None
 
 
+class ProjectInput(BaseModel):
+    """An edited project sent back to replace the stored set.
+
+    Carries its own ``source`` (``"cv"`` / ``"projects_pdf"``) so the full-set
+    replacement keeps each project's origin.
+    """
+
+    name: str
+    summary: str | None = None
+    tech_stack: list[str] = []
+    github_url: str | None = None
+    deployed_url: str | None = None
+    source: str = "cv"
+
+
 class ProjectRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

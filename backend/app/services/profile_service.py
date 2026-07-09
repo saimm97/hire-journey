@@ -10,12 +10,29 @@ from app.models.candidate import Candidate
 from app.models.project import Project, ProjectSource
 from app.models.resume import Resume
 from app.schemas.profile import CVExtraction
-from app.schemas.project import ParsedProject
-from app.services import linkedin_extract, pdf, project_extract, text_extract
+from app.schemas.project import ParsedProject, ProjectInput
+from app.services import pdf, project_extract, text_extract
 
 _CANDIDATE_FIELDS = (
-    "first_name", "last_name", "email", "phone", "github_url", "tech_stack",
+    "first_name", "last_name", "email", "phone", "github_url", "tech_stack", "summary",
 )
+
+
+async def _get_candidate(db: AsyncSession, user_id: uuid.UUID) -> Candidate | None:
+    """Return the user's candidate row, or None when they have no profile yet."""
+    return (
+        await db.execute(select(Candidate).where(Candidate.user_id == user_id))
+    ).scalar_one_or_none()
+
+
+async def _list_projects(
+    db: AsyncSession, user_id: uuid.UUID, source: str | None = None
+) -> list[Project]:
+    """Return the user's projects (all sources, or one) ordered oldest-first."""
+    query = select(Project).where(Project.user_id == user_id)
+    if source is not None:
+        query = query.where(Project.source == source)
+    return list((await db.execute(query.order_by(Project.created_at))).scalars().all())
 
 
 async def upsert_candidate(db: AsyncSession, user_id: uuid.UUID, fields: dict) -> None:
@@ -50,6 +67,52 @@ async def replace_projects(
 def _candidate_values(extraction: CVExtraction) -> dict:
     data = extraction.model_dump()
     return {field: data[field] for field in _CANDIDATE_FIELDS if data.get(field)}
+
+
+async def get_snapshot(
+    db: AsyncSession, user_id: uuid.UUID
+) -> tuple[Candidate | None, list[Project], str | None]:
+    """Load the persisted onboarding state so a returning user resumes where they left off.
+
+    Returns ``(candidate, projects, summary)`` — or ``(None, [], None)`` when the
+    user has no candidate yet, which the endpoint surfaces as a 404.
+    """
+    candidate = await _get_candidate(db, user_id)
+    if candidate is None:
+        return None, [], None
+    projects = await _list_projects(db, user_id)
+    return candidate, projects, candidate.summary
+
+
+async def update_profile(db: AsyncSession, user_id: uuid.UUID, fields: dict) -> Candidate:
+    """Partially update the candidate with ``fields`` and return the fresh row.
+
+    Backs both onboarding steps; an empty ``fields`` dict is a no-op touch.
+    """
+    await upsert_candidate(db, user_id, fields)
+    await db.commit()
+    candidate = await _get_candidate(db, user_id)
+    assert candidate is not None
+    return candidate
+
+
+async def set_projects(
+    db: AsyncSession, user_id: uuid.UUID, projects: list[ProjectInput]
+) -> list[Project]:
+    """Replace the user's entire project set with the edited list and return it.
+
+    Unlike :func:`replace_projects`, this spans all sources — the client sends the
+    full edited set (CV + projects-PDF), so edits, deletions, and per-item source
+    all persist in one write.
+    """
+    try:
+        await db.execute(delete(Project).where(Project.user_id == user_id))
+        db.add_all(Project(user_id=user_id, **project.model_dump()) for project in projects)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
+    return await _list_projects(db, user_id)
 
 
 async def process_cv(
@@ -93,38 +156,11 @@ async def process_cv(
         await db.rollback()
         raise
 
-    candidate = (
-        await db.execute(select(Candidate).where(Candidate.user_id == user_id))
-    ).scalar_one()
-    stored_projects = (
-        await db.execute(
-            select(Project)
-            .where(Project.user_id == user_id, Project.source == ProjectSource.CV)
-            .order_by(Project.created_at)
-        )
-    ).scalars().all()
-    return candidate, list(stored_projects), extraction.summary
-
-
-async def process_linkedin(db: AsyncSession, user_id: uuid.UUID, data: bytes) -> Candidate:
-    """Parse a LinkedIn PDF export and store the whole parse on the candidate.
-
-    The full parsed export — LinkedIn URL and every parsed field — is kept as one
-    JSON blob in ``candidates.linkedin_data``; no flat columns are written from it.
-    """
-    text = pdf.extract_text(data)
-    extraction = linkedin_extract.extract_fields(text)
-
-    try:
-        await upsert_candidate(db, user_id, {"linkedin_data": extraction.model_dump()})
-        await db.commit()
-    except Exception:
-        await db.rollback()
-        raise
-
-    return (
-        await db.execute(select(Candidate).where(Candidate.user_id == user_id))
-    ).scalar_one()
+    candidate = await _get_candidate(db, user_id)
+    assert candidate is not None
+    # All sources, so a re-upload keeps any projects added from a projects PDF.
+    stored_projects = await _list_projects(db, user_id)
+    return candidate, stored_projects, candidate.summary
 
 
 async def process_projects_pdf(
@@ -145,12 +181,4 @@ async def process_projects_pdf(
         await db.rollback()
         raise
 
-    return list(
-        (
-            await db.execute(
-                select(Project)
-                .where(Project.user_id == user_id, Project.source == ProjectSource.PROJECTS_PDF)
-                .order_by(Project.created_at)
-            )
-        ).scalars().all()
-    )
+    return await _list_projects(db, user_id, ProjectSource.PROJECTS_PDF)
