@@ -1,6 +1,6 @@
 """Authentication endpoints: register, login, Google sign-in, current user."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -48,6 +48,7 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> U
 
 @router.post("/login", response_model=Token)
 async def login(
+    response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
 ) -> Token:
@@ -60,19 +61,54 @@ async def login(
             detail=messages.CREDENTIALS_INVALID,
             headers=messages.AUTH_HEADER,
         )
-    return _issue_token(user)
+    token = _issue_token(user)
+    response.set_cookie(
+        key="access_token",
+        value=token.access_token,
+        httponly=True,
+        samesite="lax",
+        secure=settings.cookie_secure,
+        path="/",
+        max_age=settings.access_token_expire_minutes * 60,
+    )
+    return token
 
 
 @router.post("/google", response_model=Token)
 async def google_login(
-    payload: GoogleAuthRequest, db: AsyncSession = Depends(get_db)
+    response: Response,
+    payload: GoogleAuthRequest,
+    db: AsyncSession = Depends(get_db),
 ) -> Token:
     """Exchange a Google ID token for a bearer token."""
     try:
         user = await authenticate_google_user(db, payload.credential)
     except GoogleAuthError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
-    return _issue_token(user)
+    token = _issue_token(user)
+    response.set_cookie(
+        key="access_token",
+        value=token.access_token,
+        httponly=True,
+        samesite="lax",
+        secure=settings.cookie_secure,
+        path="/",
+        max_age=settings.access_token_expire_minutes * 60,
+    )
+    return token
+
+
+@router.post("/logout")
+async def logout(response: Response):
+    """Clear the access_token cookie from the client browser."""
+    response.delete_cookie(
+        key="access_token",
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=settings.cookie_secure,
+    )
+    return {"message": "Logged out successfully"}
 
 
 @router.get("/me", response_model=UserRead)
