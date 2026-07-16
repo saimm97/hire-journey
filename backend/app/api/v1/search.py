@@ -23,12 +23,15 @@ async def run_search(
     Creates a search session and returns its id. Use GET /{session_id}/results
     to retrieve ranked results.
     """
-    session, total = await search_service.run_search(
-        db=db,
-        user_id=current_user.user_id,
-        resume_id=payload.resume_id,
-        search_terms=payload.search_terms,
-    )
+    try:
+        session, total = await search_service.run_search(
+            db=db,
+            user_id=current_user.user_id,
+            resume_id=payload.resume_id,
+            search_terms=payload.search_terms,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return SearchRunResponse(session_id=session.session_id, total_jobs_scored=total)
 
 
@@ -45,7 +48,9 @@ async def get_results(
     try:
         sid = uuid.UUID(session_id)
     except ValueError:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid session_id")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid session_id"
+        )
 
     return await search_service.get_results(
         db=db,

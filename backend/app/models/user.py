@@ -10,11 +10,10 @@ from app.database import Base
 
 if TYPE_CHECKING:
     from app.models.application import Application
-    from app.models.candidate import Candidate
     from app.models.evaluation import Evaluation
     from app.models.job_note import JobNote
     from app.models.job_score import JobScore
-    from app.models.project import Project
+    from app.models.profile import Profile
     from app.models.resume import Resume
     from app.models.search_session import SearchSession
     from app.models.tailored_resume import TailoredResume
@@ -32,15 +31,10 @@ class User(Base):
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Google's stable subject id ("sub"); set only for Google-linked accounts.
     google_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    candidate: Mapped["Candidate | None"] = relationship(
+    profile: Mapped["Profile | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
-    )
-    projects: Mapped[list["Project"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
     )
     resumes: Mapped[list["Resume"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"

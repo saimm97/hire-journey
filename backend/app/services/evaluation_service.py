@@ -46,15 +46,21 @@ async def run_evaluation(
     if job is None:
         raise ValueError(f"Job {job_id} not found")
 
-    resume = await db.get(Resume, resume_id)
+    resume = (
+        await db.execute(
+            select(Resume).where(
+                Resume.resume_id == resume_id,
+                Resume.user_id == user_id,
+            )
+        )
+    ).scalar_one_or_none()
     if resume is None:
         raise ValueError(f"Resume {resume_id} not found")
 
     skills: list[str] = []
     if resume.parsed_content:
         skills = [
-            s.get("name", "") for s in resume.parsed_content.get("skills", [])
-            if s.get("name")
+            s.get("name", "") for s in resume.parsed_content.get("skills", []) if s.get("name")
         ]
 
     result = await evaluate_job(

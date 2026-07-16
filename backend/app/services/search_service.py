@@ -31,6 +31,17 @@ async def run_search(
 ) -> tuple[SearchSession, int]:
     """Run the full pipeline. Returns the created session and total jobs scored."""
 
+    resume_row = (
+        await db.execute(
+            select(Resume).where(
+                Resume.resume_id == resume_id,
+                Resume.user_id == user_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if resume_row is None:
+        raise ValueError(f"Resume {resume_id} not found")
+
     # Stage 1: session
     session = SearchSession(
         user_id=user_id,
@@ -45,12 +56,10 @@ async def run_search(
     fetch_results = await fetch_service.fetch_all(companies)
 
     # Load resume skills for scoring (may be empty if resume isn't parsed yet)
-    resume_row = await db.get(Resume, resume_id)
     resume_skills: list[str] = []
     if resume_row and resume_row.parsed_content:
         resume_skills = [
-            s.get("name", "") for s in resume_row.parsed_content.get("skills", [])
-            if s.get("name")
+            s.get("name", "") for s in resume_row.parsed_content.get("skills", []) if s.get("name")
         ]
 
     # Stages 3 + 4: upsert jobs → score → store job_scores
@@ -68,13 +77,15 @@ async def run_search(
                 search_terms=search_terms,
                 resume_skills=resume_skills,
             )
-            db.add(JobScore(
-                job_id=job.job_id,
-                session_id=session.session_id,
-                user_id=user_id,
-                resume_id=resume_id,
-                score=s,
-            ))
+            db.add(
+                JobScore(
+                    job_id=job.job_id,
+                    session_id=session.session_id,
+                    user_id=user_id,
+                    resume_id=resume_id,
+                    score=s,
+                )
+            )
             total_scored += 1
 
     await db.commit()
