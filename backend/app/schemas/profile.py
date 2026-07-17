@@ -1,11 +1,9 @@
 """Profile onboarding request, extraction, and response schemas."""
 
-import uuid
 from datetime import datetime
-from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.schemas.project import ProjectRead
 
@@ -31,33 +29,11 @@ class LinkedInExtraction(BaseModel):
     linkedin_summary: str | None = None
 
 
-class TechnologySelection(BaseModel):
-    technology_id: uuid.UUID | None = None
-    name: str | None = Field(default=None, min_length=1, max_length=100)
-    proficiency: str | None = Field(default=None, max_length=30)
-    years_experience: Decimal | None = Field(default=None, ge=0, max_digits=4, decimal_places=1)
-
-    @model_validator(mode="after")
-    def require_identifier(self) -> "TechnologySelection":
-        if self.technology_id is None and not self.name:
-            raise ValueError("technology_id or name is required")
-        return self
-
-
-class ProfileTechnologyRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    technology_id: uuid.UUID
-    canonical_name: str
-    proficiency: str | None
-    years_experience: Decimal | None
-
-
 class ProfileRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    profile_id: uuid.UUID
-    user_id: uuid.UUID
+    id: int
+    user_id: int
     first_name: str | None
     last_name: str | None
     phone_number: str | None
@@ -68,16 +44,22 @@ class ProfileRead(BaseModel):
     title: str | None
     summary: str | None
     minimum_salary: int | None
-    salary_currency: str | None
-    salary_period: str | None
     desired_locations: list[str]
     desired_roles: list[str]
     work_modes_preferred: list[str]
     seniority_level: str | None
-    technologies: list[ProfileTechnologyRead]
-    source_resume_id: uuid.UUID | None
+    technologies: list[str]
+    source_resume_id: int | None
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("technologies", mode="before")
+    @classmethod
+    def _technology_names(cls, value: object) -> object:
+        """Accept ProfileTechnology rows (via their .name property) or plain strings."""
+        if isinstance(value, (list, tuple)):
+            return [item if isinstance(item, str) else item.name for item in value]
+        return value
 
 
 class ProfileUpdate(BaseModel):
@@ -93,13 +75,11 @@ class ProfileUpdate(BaseModel):
     title: str | None = Field(default=None, max_length=255)
     summary: str | None = None
     minimum_salary: int | None = Field(default=None, ge=0)
-    salary_currency: str | None = Field(default=None, min_length=3, max_length=3)
-    salary_period: str | None = Field(default=None, max_length=20)
     desired_locations: list[str] | None = None
     desired_roles: list[str] | None = None
     work_modes_preferred: list[str] | None = None
     seniority_level: str | None = Field(default=None, max_length=50)
-    technologies: list[TechnologySelection] | None = None
+    technologies: list[str] | None = None
 
     @field_validator("desired_locations", "desired_roles", "work_modes_preferred")
     @classmethod
@@ -110,12 +90,6 @@ class ProfileUpdate(BaseModel):
     @classmethod
     def validate_social_links(cls, value: dict[str, str] | None) -> dict[str, str]:
         return value if value is not None else {}
-
-    @field_validator("salary_currency")
-    @classmethod
-    def uppercase_currency(cls, value: str | None) -> str | None:
-        return value.upper() if value else None
-
 
 class CVUploadResult(BaseModel):
     profile: ProfileRead

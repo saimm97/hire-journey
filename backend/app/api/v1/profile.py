@@ -1,7 +1,5 @@
 """Profile endpoints: build the user's profile from uploaded documents."""
 
-import uuid
-
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,7 +27,7 @@ async def read_profile(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CVUploadResult:
-    snapshot = await profile_service.get_profile(db, current_user.user_id)
+    snapshot = await profile_service.get_profile(db, current_user.id)
     if snapshot is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -51,7 +49,7 @@ async def update_profile(
 ) -> Profile:
     return await profile_service.update_profile(
         db,
-        current_user.user_id,
+        current_user.id,
         payload.model_dump(exclude_unset=True),
     )
 
@@ -88,7 +86,7 @@ def _pdf_error_handler(exc: Exception) -> None:
 @router.post("/cv", response_model=CVUploadResult, status_code=status.HTTP_201_CREATED)
 async def upload_cv(
     file: UploadFile = File(...),
-    replace_resume_id: uuid.UUID | None = None,
+    replace_resume_id: int | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CVUploadResult:
@@ -96,7 +94,7 @@ async def upload_cv(
     try:
         profile, projects, summary = await profile_service.process_cv(
             db,
-            current_user.user_id,
+            current_user.id,
             file.filename or "cv.pdf",
             data,
             replace_resume_id=replace_resume_id,
@@ -122,7 +120,7 @@ async def upload_linkedin(
 ) -> LinkedInUploadResult:
     data = await _validate_pdf(file)
     try:
-        profile = await profile_service.process_linkedin(db, current_user.user_id, data)
+        profile = await profile_service.process_linkedin(db, current_user.id, data)
         return LinkedInUploadResult(profile=ProfileRead.model_validate(profile))
     except Exception as exc:
         _pdf_error_handler(exc)
@@ -136,7 +134,7 @@ async def upload_projects(
 ) -> ProjectsUploadResult:
     data = await _validate_pdf(file)
     try:
-        projects = await profile_service.process_projects_pdf(db, current_user.user_id, data)
+        projects = await profile_service.process_projects_pdf(db, current_user.id, data)
         return ProjectsUploadResult(projects=projects)
     except Exception as exc:
         _pdf_error_handler(exc)

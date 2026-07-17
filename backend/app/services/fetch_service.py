@@ -1,12 +1,12 @@
 """Parallel ATS job fetching with concurrency cap and per-company filtering.
 
-Fetches all active companies concurrently (capped at CONCURRENCY simultaneous
-requests), applies title and location filters from companies.yaml, and returns
-a mapping of Company → filtered RawJob list.
+Companies no longer record which ATS they use — every adapter is tried for each
+company's slug and the results are combined (a slug that doesn't exist on a
+board simply yields nothing). Fetches run concurrently (capped at CONCURRENCY
+simultaneous requests) and title/location filters from companies.yaml apply.
 
-A failed fetch for one company is logged and skipped — it never aborts the whole
-scan. This mirrors career-ops behaviour where a single bad API response doesn't
-stop the pipeline.
+A failed fetch for one company/adapter is logged and skipped — it never aborts
+the whole scan.
 """
 
 import asyncio
@@ -42,17 +42,23 @@ async def _fetch_one(
     filters: dict,
     sem: asyncio.Semaphore,
 ) -> tuple[Company, list[RawJob]]:
-    source = SOURCES.get(company.source.name)
-    if source is None:
-        logger.warning("No adapter for source '%s' (company: %s)", company.source.name, company.name)
+    if not company.slug:
         return company, []
 
+    raw_jobs: list[RawJob] = []
+    seen_urls: set[str] = set()
     async with sem:
-        try:
-            raw_jobs = await source.fetch(company.slug, company.name)
-        except Exception as exc:
-            logger.warning("Fetch failed for %s: %s", company.name, exc)
-            return company, []
+        for source_name, source in SOURCES.items():
+            try:
+                fetched = await source.fetch(company.slug, company.name)
+            except Exception as exc:
+                logger.debug("%s fetch failed for %s: %s", source_name, company.name, exc)
+                continue
+            for job in fetched:
+                if job.url and job.url in seen_urls:
+                    continue
+                seen_urls.add(job.url)
+                raw_jobs.append(job)
 
     filtered = apply_filters(
         raw_jobs,

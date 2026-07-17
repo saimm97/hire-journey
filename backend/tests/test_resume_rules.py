@@ -1,19 +1,23 @@
-"""Schema-level tests for resume account invariants."""
+"""Schema-level tests for resume account rules."""
 
 from app.models.resume import Resume
 from app.schemas.resume import ResumeRead
+from app.services.resume_service import MAX_RESUMES_PER_USER
 
 
-def test_resume_model_declares_slot_and_active_constraints():
-    constraint_names = {constraint.name for constraint in Resume.__table__.constraints}
-    index_names = {index.name for index in Resume.__table__.indexes}
+def test_resume_model_has_no_slot_or_active_columns():
+    column_names = set(Resume.__table__.columns.keys())
 
-    assert "ck_resumes_slot_number" in constraint_names
-    assert "uq_resumes_user_slot" in constraint_names
-    assert "uq_resumes_one_active_per_user" in index_names
+    assert "slot_number" not in column_names
+    assert "is_active" not in column_names
+    assert {"id", "user_id", "file_name", "created_at", "updated_at"} <= column_names
 
 
-def test_resume_response_exposes_slot_and_active_state():
+def test_resume_limit_is_two():
+    assert MAX_RESUMES_PER_USER == 2
+
+
+def test_resume_response_shape():
     field_names = set(ResumeRead.model_fields)
 
-    assert {"resume_id", "slot_number", "is_active", "updated_at"} <= field_names
+    assert field_names == {"id", "file_name", "created_at", "updated_at"}

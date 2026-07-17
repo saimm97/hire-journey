@@ -8,7 +8,7 @@ export type Token = {
 
 /** Mirrors the backend `UserRead` schema. */
 export type User = {
-  user_id: string
+  id: number
   username: string
   email: string
 }

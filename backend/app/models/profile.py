@@ -1,16 +1,17 @@
-import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func, text
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
 if TYPE_CHECKING:
     from app.models.employment import EmploymentHistory
+    from app.models.evaluation import Evaluation
     from app.models.project import ProfileProject
+    from app.models.tailored_resume import TailoredResume
     from app.models.technology import ProfileTechnology
     from app.models.user import User
 
@@ -33,12 +34,10 @@ class Profile(Base):
         ),
     )
 
-    profile_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("users.user_id", ondelete="CASCADE"),
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
         unique=True,
         nullable=False,
     )
@@ -58,8 +57,6 @@ class Profile(Base):
     title: Mapped[str | None] = mapped_column(String(255))
     summary: Mapped[str | None] = mapped_column(Text)
     minimum_salary: Mapped[int | None] = mapped_column(Integer)
-    salary_currency: Mapped[str | None] = mapped_column(String(3))
-    salary_period: Mapped[str | None] = mapped_column(String(20))
     desired_locations: Mapped[list[str]] = mapped_column(
         ARRAY(String), nullable=False, default=list, server_default=text("'{}'")
     )
@@ -70,8 +67,8 @@ class Profile(Base):
         ARRAY(String), nullable=False, default=list, server_default=text("'{}'")
     )
     seniority_level: Mapped[str | None] = mapped_column(String(50))
-    source_resume_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("resumes.resume_id", ondelete="SET NULL")
+    source_resume_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("resumes.id", ondelete="SET NULL")
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -86,5 +83,11 @@ class Profile(Base):
         back_populates="profile", cascade="all, delete-orphan"
     )
     technologies: Mapped[list["ProfileTechnology"]] = relationship(
+        back_populates="profile", cascade="all, delete-orphan"
+    )
+    evaluations: Mapped[list["Evaluation"]] = relationship(
+        back_populates="profile", cascade="all, delete-orphan"
+    )
+    tailored_resumes: Mapped[list["TailoredResume"]] = relationship(
         back_populates="profile", cascade="all, delete-orphan"
     )

@@ -22,7 +22,7 @@ router = APIRouter()
 
 
 def _issue_token(user: User) -> Token:
-    return Token(access_token=create_access_token(subject=str(user.user_id)))
+    return Token(access_token=create_access_token(subject=str(user.id)))
 
 
 @router.get("/config", response_model=AuthConfig)

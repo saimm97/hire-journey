@@ -1,45 +1,23 @@
-import uuid
-from datetime import date, datetime
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import (
-    Boolean,
-    CheckConstraint,
-    Date,
-    DateTime,
-    ForeignKey,
-    String,
-    Text,
-    UniqueConstraint,
-    func,
-)
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
 if TYPE_CHECKING:
     from app.models.profile import Profile
-
-
-class ProjectSource:
-    CV = "cv"
-    PROJECTS_PDF = "projects_pdf"
+    from app.models.technology import Technology
 
 
 class Project(Base):
+    """A bare project identity; per-profile details live on ProfileProject."""
+
     __tablename__ = "projects"
 
-    project_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    summary: Mapped[str | None] = mapped_column(Text)
-    tech_stack: Mapped[list[str] | None] = mapped_column(ARRAY(String))
-    github_url: Mapped[str | None] = mapped_column(String(255))
-    deployed_url: Mapped[str | None] = mapped_column(String(255))
-    start_date: Mapped[date | None] = mapped_column(Date)
-    end_date: Mapped[date | None] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -54,28 +32,42 @@ class ProfileProject(Base):
     __tablename__ = "profile_projects"
     __table_args__ = (
         UniqueConstraint("profile_id", "project_id", name="uq_profile_projects_pair"),
-        CheckConstraint(
-            "end_date IS NULL OR start_date IS NULL OR end_date >= start_date",
-            name="ck_profile_projects_dates",
-        ),
     )
 
-    profile_project_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    profile_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("profiles.id", ondelete="CASCADE"), nullable=False
     )
-    profile_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("profiles.profile_id", ondelete="CASCADE"), nullable=False
+    project_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
     )
-    project_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("projects.project_id", ondelete="CASCADE"), nullable=False
-    )
-    role: Mapped[str | None] = mapped_column(String(255))
-    contribution_summary: Mapped[str | None] = mapped_column(Text)
-    start_date: Mapped[date | None] = mapped_column(Date)
-    end_date: Mapped[date | None] = mapped_column(Date)
-    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    source: Mapped[str | None] = mapped_column(String(20))
+    summary: Mapped[str | None] = mapped_column(Text)
+    github_url: Mapped[str | None] = mapped_column(String(255))
+    deployed_url: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     profile: Mapped["Profile"] = relationship(back_populates="project_memberships")
     project: Mapped["Project"] = relationship(back_populates="profile_memberships")
+    technologies: Mapped[list["ProfileProjectTechnology"]] = relationship(
+        back_populates="profile_project", cascade="all, delete-orphan"
+    )
+
+
+class ProfileProjectTechnology(Base):
+    """Normalized tech stack of one profile's project (replaces the string array)."""
+
+    __tablename__ = "profile_project_technologies"
+
+    profile_project_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("profile_projects.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    technology_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("technologies.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+
+    profile_project: Mapped["ProfileProject"] = relationship(back_populates="technologies")
+    technology: Mapped["Technology"] = relationship()

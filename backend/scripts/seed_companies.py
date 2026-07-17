@@ -1,4 +1,4 @@
-"""Seed the companies and sources tables from config/companies.yaml.
+"""Seed the companies table from config/companies.yaml.
 
 Run from backend/:
     python scripts/seed_companies.py
@@ -20,7 +20,7 @@ from app.services.company_service import seed_from_yaml
 async def main() -> None:
     async with AsyncSessionLocal() as db:
         counts = await seed_from_yaml(db)
-    print(f"Done — sources: {counts['sources']}, companies inserted: {counts['companies']}")
+    print(f"Done — companies inserted: {counts['companies']}")
 
 
 if __name__ == "__main__":
