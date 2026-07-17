@@ -8,17 +8,50 @@ from app.api.deps import get_current_user
 from app.config import settings
 from app.database import get_db
 from app.exceptions import PdfNoTextError, PdfUnreadableError
+from app.models.profile import Profile
 from app.models.user import User
 from app.schemas.profile import (
     CVUploadResult,
     LinkedInUploadResult,
     ProfileRead,
+    ProfileUpdate,
     ProjectsUploadResult,
 )
-from app.schemas.project import ProjectRead
-from app.services import pdf, profile_service
+from app.services import pdf, profile_service, resume_service
 
 router = APIRouter()
+
+
+@router.get("", response_model=CVUploadResult)
+async def read_profile(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CVUploadResult:
+    snapshot = await profile_service.get_profile(db, current_user.id)
+    if snapshot is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Profile has not been created yet.",
+        )
+    profile, projects, resume_summary = snapshot
+    return CVUploadResult(
+        profile=ProfileRead.model_validate(profile),
+        resume_summary=resume_summary,
+        projects=projects,
+    )
+
+
+@router.patch("", response_model=ProfileRead)
+async def update_profile(
+    payload: ProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Profile:
+    return await profile_service.update_profile(
+        db,
+        current_user.id,
+        payload.model_dump(exclude_unset=True),
+    )
 
 
 async def _validate_pdf(file: UploadFile) -> bytes:
@@ -53,20 +86,29 @@ def _pdf_error_handler(exc: Exception) -> None:
 @router.post("/cv", response_model=CVUploadResult, status_code=status.HTTP_201_CREATED)
 async def upload_cv(
     file: UploadFile = File(...),
+    replace_resume_id: int | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CVUploadResult:
     data = await _validate_pdf(file)
     try:
         profile, projects, summary = await profile_service.process_cv(
-            db, current_user.user_id, file.filename or "cv.pdf", data
+            db,
+            current_user.id,
+            file.filename or "cv.pdf",
+            data,
+            replace_resume_id=replace_resume_id,
         )
         return CVUploadResult(
             profile=ProfileRead.model_validate(profile),
             resume_summary=summary,
-            projects=[ProjectRead.model_validate(p) for p in projects],
+            projects=projects,
         )
     except Exception as exc:
+        if isinstance(exc, resume_service.ResumeLimitError):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        if isinstance(exc, resume_service.ResumeNotFoundError):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
         _pdf_error_handler(exc)
 
 
@@ -78,8 +120,8 @@ async def upload_linkedin(
 ) -> LinkedInUploadResult:
     data = await _validate_pdf(file)
     try:
-        candidate = await profile_service.process_linkedin(db, current_user.user_id, data)
-        return LinkedInUploadResult(profile=ProfileRead.model_validate(candidate))
+        profile = await profile_service.process_linkedin(db, current_user.id, data)
+        return LinkedInUploadResult(profile=ProfileRead.model_validate(profile))
     except Exception as exc:
         _pdf_error_handler(exc)
 
@@ -92,7 +134,7 @@ async def upload_projects(
 ) -> ProjectsUploadResult:
     data = await _validate_pdf(file)
     try:
-        projects = await profile_service.process_projects_pdf(db, current_user.user_id, data)
-        return ProjectsUploadResult(projects=[ProjectRead.model_validate(p) for p in projects])
+        projects = await profile_service.process_projects_pdf(db, current_user.id, data)
+        return ProjectsUploadResult(projects=projects)
     except Exception as exc:
         _pdf_error_handler(exc)

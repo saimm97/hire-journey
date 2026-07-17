@@ -1,10 +1,10 @@
-import uuid
+from datetime import datetime
 
 from pydantic import BaseModel
 
 
 class JobDetail(BaseModel):
-    job_id: uuid.UUID
+    id: int
     title: str
     company_name: str
     location: str | None
@@ -12,7 +12,7 @@ class JobDetail(BaseModel):
     description: str | None
     salary_min: int | None
     salary_max: int | None
-    source_name: str
+    deadline: datetime | None
 
     model_config = {"from_attributes": True}
 

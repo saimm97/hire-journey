@@ -1,5 +1,3 @@
-import uuid
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +16,7 @@ router = APIRouter()
 
 def _to_detail(job: Job) -> JobDetail:
     return JobDetail(
-        job_id=job.job_id,
+        id=job.id,
         title=job.title,
         company_name=job.company.name,
         location=job.location,
@@ -26,7 +24,7 @@ def _to_detail(job: Job) -> JobDetail:
         description=job.description,
         salary_min=job.salary_min,
         salary_max=job.salary_max,
-        source_name=job.source.name,
+        deadline=job.deadline,
     )
 
 
@@ -40,7 +38,7 @@ async def list_jobs(
     _: User = Depends(get_current_user),
 ) -> JobListResponse:
     """List all fetched jobs with optional company/title filters."""
-    base = select(Job).options(selectinload(Job.company), selectinload(Job.source))
+    base = select(Job).options(selectinload(Job.company))
 
     if company:
         base = base.join(Job.company).where(Company.name.ilike(f"%{company}%"))
@@ -49,16 +47,14 @@ async def list_jobs(
 
     total = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
 
-    rows = (
-        await db.execute(base.order_by(Job.title).limit(limit).offset(offset))
-    ).scalars().all()
+    rows = (await db.execute(base.order_by(Job.title).limit(limit).offset(offset))).scalars().all()
 
     return JobListResponse(total=total, results=[_to_detail(j) for j in rows])
 
 
 @router.get("/{job_id}", response_model=JobDetail)
 async def get_job(
-    job_id: uuid.UUID,
+    job_id: int,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> JobDetail:

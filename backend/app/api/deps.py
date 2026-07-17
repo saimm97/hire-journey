@@ -1,6 +1,5 @@
 """Shared FastAPI dependencies."""
 
-import uuid
 from typing import Annotated
 
 import jwt
@@ -35,12 +34,12 @@ async def get_current_user(
 
     try:
         payload = jwt.decode(raw_token, settings.secret_key, algorithms=[settings.algorithm])
-        user_id = uuid.UUID(payload.get("sub"))
+        user_id = int(payload.get("sub"))
     except (jwt.PyJWTError, ValueError, TypeError):
         raise unauthorized
 
     user = (
-        await db.execute(select(User).where(User.user_id == user_id))
+        await db.execute(select(User).where(User.id == user_id))
     ).scalar_one_or_none()
     if user is None:
         raise unauthorized

@@ -60,7 +60,7 @@ async def _unique_username(db: AsyncSession, email: str) -> str:
     base = base[:40]
     candidate, suffix = base, 0
     while (
-        await db.execute(select(User.user_id).where(User.username == candidate))
+        await db.execute(select(User.id).where(User.username == candidate))
     ).first() is not None:
         suffix += 1
         candidate = f"{base}{suffix}"
@@ -70,27 +70,19 @@ async def _unique_username(db: AsyncSession, email: str) -> str:
 async def authenticate_google_user(db: AsyncSession, credential: str) -> User:
     """Resolve a Google ID token to a user, linking or creating as needed."""
     claims = await verify_google_id_token(credential)
-    google_sub, email = claims["sub"], claims["email"]
 
-    linked = await db.execute(select(User).where(User.google_id == google_sub))
-    user = linked.scalar_one_or_none()
-    if user is not None:
-        return user
+    email = claims["email"]
+    if not claims.get("email_verified", False):  # never trust an unverified email
+        raise GoogleAuthError(messages.GOOGLE_EMAIL_UNVERIFIED)
 
     existing = await db.execute(select(User).where(User.email == email))
     user = existing.scalar_one_or_none()
     if user is not None:
-        if not claims.get("email_verified", False):  # never link an unverified email
-            raise GoogleAuthError(messages.GOOGLE_EMAIL_UNVERIFIED)
-        user.google_id = google_sub
-        await db.commit()
-        await db.refresh(user)
         return user
 
     user = User(
         username=await _unique_username(db, email),
         email=email,
-        google_id=google_sub,
         password_hash=None,
     )
     db.add(user)
@@ -99,7 +91,7 @@ async def authenticate_google_user(db: AsyncSession, credential: str) -> User:
     except IntegrityError:  # concurrent first sign-in for the same account
         await db.rollback()
         user = (
-            await db.execute(select(User).where(User.google_id == google_sub))
+            await db.execute(select(User).where(User.email == email))
         ).scalar_one_or_none()
         if user is None:
             raise GoogleAuthError(messages.GOOGLE_ACCOUNT_FAILED)

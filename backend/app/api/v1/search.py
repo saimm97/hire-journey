@@ -1,56 +1,42 @@
-import uuid
-
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.database import get_db
 from app.models.user import User
-from app.schemas.search import SearchRequest, SearchResultsResponse, SearchRunResponse
+from app.schemas.search import SearchResultsResponse, SearchRunResponse
 from app.services import search_service
 
 router = APIRouter()
 
 
 @router.post("/run", response_model=SearchRunResponse, status_code=status.HTTP_202_ACCEPTED)
-async def run_search(
-    payload: SearchRequest,
+async def run_scan(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    _: User = Depends(get_current_user),
 ) -> SearchRunResponse:
-    """Fetch jobs from all active ATS boards, filter, and score against the provided terms.
+    """Fetch jobs from every scannable company (all ATS boards tried) and store them.
 
-    Creates a search session and returns its id. Use GET /{session_id}/results
-    to retrieve ranked results.
+    Scores are not persisted — rank stored jobs with GET /results.
     """
-    session, total = await search_service.run_search(
-        db=db,
-        user_id=current_user.user_id,
-        resume_id=payload.resume_id,
-        search_terms=payload.search_terms,
-    )
-    return SearchRunResponse(session_id=session.session_id, total_jobs_scored=total)
+    total = await search_service.run_scan(db)
+    return SearchRunResponse(total_jobs_fetched=total)
 
 
-@router.get("/{session_id}/results", response_model=SearchResultsResponse)
+@router.get("/results", response_model=SearchResultsResponse)
 async def get_results(
-    session_id: str,
+    terms: list[str] = Query(min_length=1, description="Keywords to score jobs against"),
     min_score: int = Query(default=0, ge=0, le=100),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> SearchResultsResponse:
-    """Return ranked jobs for a session, filtered by minimum score."""
-    try:
-        sid = uuid.UUID(session_id)
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid session_id")
-
+    """Rank stored jobs against the terms plus the caller's latest resume skills."""
     return await search_service.get_results(
         db=db,
-        session_id=sid,
-        user_id=current_user.user_id,
+        user_id=current_user.id,
+        search_terms=terms,
         min_score=min_score,
         limit=limit,
         offset=offset,
