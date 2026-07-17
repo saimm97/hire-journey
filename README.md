@@ -19,7 +19,11 @@ End-to-end AI-powered job search platform. Upload your resume, discover relevant
 
 ---
 
+
+
 ## Getting Started
+
+
 
 ### 1. Clone the repo
 
@@ -27,6 +31,8 @@ End-to-end AI-powered job search platform. Upload your resume, discover relevant
 git clone https://github.com/careerEnginee/career-engine
 cd career-engine
 ```
+
+
 
 ### 2. Install Docker
 
@@ -46,6 +52,8 @@ Verify:
 ```bash
 docker --version
 ```
+
+
 
 ### 3. Start the database
 
@@ -68,6 +76,8 @@ docker ps
 # career-engine-db should appear with status "Up"
 ```
 
+
+
 ### 4. Configure environment
 
 ```bash
@@ -89,6 +99,8 @@ Generate a secret key:
 python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
 
+
+
 ### 5. Install dependencies
 
 ```bash
@@ -97,6 +109,8 @@ python3.13 -m venv .venv         # use a 3.13 interpreter (see Prerequisites)
 source .venv/bin/activate        # macOS/Linux
 pip install -r requirements-dev.txt
 ```
+
+
 
 ### 6. Run migrations
 
@@ -132,32 +146,42 @@ Open [http://localhost:5500](http://localhost:5500). It calls the backend at `ht
 
 ---
 
+
+
 ## Browsing the database
+
+
 
 ### Option 1 — DBeaver (GUI, recommended)
 
 Free database client with a visual table browser and SQL editor.
 
 **Linux:**
+
 ```bash
 sudo snap install dbeaver-ce
 ```
 
 **macOS:**
+
 ```bash
 brew install --cask dbeaver-community
 ```
+
 Or download from [dbeaver.io](https://dbeaver.io/download).
 
 **Connect:**
+
 1. Open DBeaver → New Database Connection → PostgreSQL
 2. Fill in:
-   - Host: `localhost`
-   - Port: `5432`
-   - Database: `career_engine`
-   - Username: `postgres`
-   - Password: `postgres`
+  - Host: `localhost`
+  - Port: `5432`
+  - Database: `career_engine`
+  - Username: `postgres`
+  - Password: `postgres`
 3. Test Connection → Finish
+
+
 
 ### Option 2 — psql (CLI, quick checks)
 
@@ -166,6 +190,7 @@ docker exec -it career-engine-db psql -U postgres -d career_engine
 ```
 
 Useful commands inside psql:
+
 ```sql
 \dt                  -- list all tables
 \d users             -- show columns of a table
@@ -174,6 +199,8 @@ SELECT * FROM users; -- run any query
 ```
 
 ---
+
+
 
 ## Day-to-day commands
 
@@ -194,10 +221,26 @@ pytest
 
 ---
 
+
+
+## Documentation
+
+- [Documentation index](docs/README.md)
+- [Current database schema and ERD](docs/architecture/database-schema.md)
+- [Architecture decisions](docs/adr/)
+
+Update the relevant documentation in the same pull request as schema or
+business-rule changes.
+
+---
+
+
+
 ## Project structure
 
 ```
 career-engine/
+├── docs/                  # architecture, ADRs and progress
 ├── backend/
 │   ├── app/
 │   │   ├── api/v1/        # FastAPI route handlers
@@ -219,19 +262,21 @@ career-engine/
 
 ---
 
+
+
 ## Environment variables
 
 
-| Variable                      | Required | Description                            |
-| ----------------------------- | -------- | -------------------------------------- |
-| `DATABASE_URL`                | Yes      | PostgreSQL connection string           |
-| `SECRET_KEY`                  | Yes      | JWT signing secret — keep this private |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | No       | Token expiry, default 60               |
+| Variable                      | Required | Description                                                       |
+| ----------------------------- | -------- | ----------------------------------------------------------------- |
+| `DATABASE_URL`                | Yes      | PostgreSQL connection string                                      |
+| `SECRET_KEY`                  | Yes      | JWT signing secret — keep this private                            |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | No       | Token expiry, default 60                                          |
 | `GOOGLE_CLIENT_ID`            | No       | OAuth Web client id for "Continue with Google"; blank disables it |
-| `MAX_UPLOAD_MB`               | No       | Max CV upload size in MB, default 5    |
-| `GEMINI_API_KEY`              | Yes      | Gemini API key for AI features         |
-| `OPENAI_API_KEY`              | No       | Optional OpenAI fallback               |
+| `MAX_UPLOAD_MB`               | No       | Max CV upload size in MB, default 5                               |
+| `GEMINI_API_KEY`              | Yes      | Gemini API key for AI features                                    |
+| `OPENAI_API_KEY`              | No       | Optional OpenAI fallback                                          |
 
 
-> **Never commit `.env` to git.** Each developer maintains their own local copy.
+> **Never commit** `.env` **to git.** Each developer maintains their own local copy.
 
