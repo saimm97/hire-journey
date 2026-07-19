@@ -5,12 +5,13 @@ from collections.abc import AsyncIterator
 
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete
+from sqlalchemy import delete, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.database import AsyncSessionLocal, engine
 from app.main import app
+from app.models.project import ProfileProject, Project
 from app.models.user import User
 
 
@@ -39,6 +40,12 @@ async def test_user(db: AsyncSession) -> AsyncIterator[User]:
         yield user
     finally:
         await db.execute(delete(User).where(User.id == user_id))
+        # Deleting the user cascades profile -> memberships at the DB level,
+        # which strands project identity rows (orphan cleanup only runs in the
+        # app's replace paths). Sweep them so tests never leak projects.
+        await db.execute(
+            delete(Project).where(~exists().where(ProfileProject.project_id == Project.id))
+        )
         await db.commit()
 
 

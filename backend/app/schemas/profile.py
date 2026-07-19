@@ -33,6 +33,8 @@ def _month_or_none(value: str | None) -> str | None:
     value = value.strip()
     if not patterns.STRICT_MONTH_RE.match(value):
         raise ValueError("must be in YYYY-MM format")
+    if not 1900 <= int(value[:4]) <= 2100:
+        raise ValueError("year must be between 1900 and 2100")
     return value
 
 
@@ -43,6 +45,8 @@ def _url_or_none(value: str | None) -> str | None:
     normalized = normalization.normalize_url(value)
     if normalized is None:
         raise ValueError("is not a valid URL")
+    if len(normalized) > 255:
+        raise ValueError("is too long (255 characters max)")
     return normalized
 
 
@@ -194,7 +198,7 @@ class ProjectEntry(BaseModel):
     summary: str | None = None
     github_url: str | None = None
     deployed_url: str | None = None
-    technologies: list[str] = Field(default_factory=list)
+    technologies: list[str] = Field(default_factory=list, max_length=100)
 
     @field_validator("github_url", "deployed_url")
     @classmethod
@@ -217,11 +221,11 @@ class ProfileDetailsUpdate(BaseModel):
     title: str | None = Field(default=None, max_length=255)
     summary: str | None = None
     social_links: SocialLinksUpdate = Field(default_factory=SocialLinksUpdate)
-    education: list[EducationEntry] = Field(default_factory=list)
-    certifications: list[CertificationEntry] = Field(default_factory=list)
-    employment_history: list[EmploymentEntry] = Field(default_factory=list)
-    projects: list[ProjectEntry] = Field(default_factory=list)
-    technologies: list[str] = Field(default_factory=list)
+    education: list[EducationEntry] = Field(default_factory=list, max_length=100)
+    certifications: list[CertificationEntry] = Field(default_factory=list, max_length=100)
+    employment_history: list[EmploymentEntry] = Field(default_factory=list, max_length=100)
+    projects: list[ProjectEntry] = Field(default_factory=list, max_length=100)
+    technologies: list[str] = Field(default_factory=list, max_length=300)
 
     @field_validator("technologies")
     @classmethod
@@ -233,9 +237,10 @@ class ProfileDetailsUpdate(BaseModel):
 
 
 class PreferencesUpdate(BaseModel):
-    minimum_salary: int | None = Field(default=None, ge=0)
-    desired_roles: list[str]
-    desired_locations: list[str] = Field(default_factory=list)
+    # Upper bound keeps the value safely inside the INTEGER column (int32).
+    minimum_salary: int | None = Field(default=None, ge=0, le=100_000_000)
+    desired_roles: list[str] = Field(max_length=100)
+    desired_locations: list[str] = Field(default_factory=list, max_length=100)
     work_modes_preferred: list[WorkMode]
     seniority_level: SeniorityLevel
 
@@ -271,7 +276,7 @@ class ProfileUpdate(BaseModel):
     certifications: list[dict[str, Any]] | None = None
     title: str | None = Field(default=None, max_length=255)
     summary: str | None = None
-    minimum_salary: int | None = Field(default=None, ge=0)
+    minimum_salary: int | None = Field(default=None, ge=0, le=100_000_000)
     desired_locations: list[str] | None = None
     desired_roles: list[str] | None = None
     work_modes_preferred: list[str] | None = None

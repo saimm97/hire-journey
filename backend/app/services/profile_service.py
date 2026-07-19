@@ -42,6 +42,16 @@ def _clean(value: str | None) -> str | None:
     return value or None
 
 
+def _clip(value: str | None, limit: int) -> str | None:
+    """Lenient-path guard: LLM output is unbounded but the columns are not.
+
+    Truncates instead of erroring — a 500 on a valid resume is worse than a
+    shortened value the user can fix in the editor.
+    """
+    cleaned = _clean(value)
+    return cleaned[:limit] if cleaned else None
+
+
 async def upsert_profile(db: AsyncSession, user_id: int, fields: dict) -> None:
     """Create the user's profile or update only the supplied fields."""
     statement = pg_insert(Profile).values(user_id=user_id, **fields)
@@ -88,7 +98,7 @@ def is_onboarding_complete(profile: Profile) -> bool:
 
 async def _get_or_create_technology(db: AsyncSession, name: str) -> Technology:
     """Upsert a technology by its lowercase-normalized name."""
-    normalized = normalize_technology(name)
+    normalized = normalize_technology(name)[:100]  # column limit; LLM output is unbounded
     statement = (
         pg_insert(Technology)
         .values(name=normalized)
@@ -185,19 +195,27 @@ async def replace_employments(
     valid = [entry for entry in entries if _clean(entry.company_name) and _clean(entry.title)]
     display_names: dict[str, str] = {}
     for entry in valid:
-        display = _normalize_company_name(entry.company_name)
+        display = _clip(_normalize_company_name(entry.company_name), 255)
         display_names.setdefault(display.lower(), display)
     companies = {
         key: await _get_or_create_company(db, display_names[key])
         for key in sorted(display_names)  # sorted: consistent advisory-lock order
     }
+    seen: set[tuple] = set()
     for entry in valid:
         start_date, end_date = _employment_dates(entry)
+        company_key = _clip(_normalize_company_name(entry.company_name), 255).lower()
+        title = _clip(entry.title, 255)
+        # Resumes often repeat a stint (e.g. summary + history); keep the first.
+        row_key = (company_key, title.lower(), start_date, end_date)
+        if row_key in seen:
+            continue
+        seen.add(row_key)
         db.add(
             EmploymentHistory(
                 profile_id=profile_id,
-                company_id=companies[_normalize_company_name(entry.company_name).lower()].id,
-                title=_clean(entry.title),
+                company_id=companies[company_key].id,
+                title=title,
                 start_date=start_date,
                 end_date=end_date,
                 description=_clean(entry.description),
@@ -270,18 +288,24 @@ async def _set_membership_technologies(
         )
 
 
+def _project_url(value: str | None) -> str | None:
+    """Normalized URL, dropped when malformed or over the column limit."""
+    url = normalization.normalize_url(value)
+    return url if url and len(url) <= 255 else None
+
+
 async def _create_membership(
     db: AsyncSession, profile_id: int, parsed: ProjectItem | ProjectEntry
 ) -> None:
-    project = Project(name=_clean(parsed.name))
+    project = Project(name=_clip(parsed.name, 255))
     db.add(project)
     await db.flush()
     membership = ProfileProject(
         profile_id=profile_id,
         project_id=project.id,
         summary=_clean(parsed.summary),
-        github_url=normalization.normalize_url(parsed.github_url),
-        deployed_url=normalization.normalize_url(parsed.deployed_url),
+        github_url=_project_url(parsed.github_url),
+        deployed_url=_project_url(parsed.deployed_url),
     )
     db.add(membership)
     await db.flush()
@@ -307,9 +331,19 @@ async def replace_projects(
                 ~exists().where(ProfileProject.project_id == Project.id),
             )
         )
+    # The LLM can surface the same project from two resume sections; dedupe
+    # by normalized name (first occurrence wins) so one profile never gets
+    # duplicate identities from a single extraction.
+    seen_names: set[str] = set()
     for parsed in projects:
-        if _clean(parsed.name):
-            await _create_membership(db, profile_id, parsed)
+        name = _clean(parsed.name)
+        if not name:
+            continue
+        key = " ".join(name.lower().split())
+        if key in seen_names:
+            continue
+        seen_names.add(key)
+        await _create_membership(db, profile_id, parsed)
 
 
 # ── Resume upload orchestration ────────────────────────────────────────
@@ -333,11 +367,11 @@ def _resume_profile_values(extraction: ResumeExtraction) -> dict:
         }.items()
     }
     return {
-        "first_name": _clean(extraction.first_name),
-        "last_name": _clean(extraction.last_name),
-        "phone_number": _clean(extraction.phone_number),
-        "location": _clean(extraction.location),
-        "title": _clean(extraction.title),
+        "first_name": _clip(extraction.first_name, 100),
+        "last_name": _clip(extraction.last_name, 100),
+        "phone_number": _clip(extraction.phone_number, 50),
+        "location": _clip(extraction.location, 255),
+        "title": _clip(extraction.title, 255),
         "summary": _clean(extraction.summary),
         "social_links": {key: value for key, value in social_links.items() if value},
         "education": [

@@ -91,6 +91,12 @@ async def upload_cv(
 ) -> OnboardingSnapshot:
     _validate_upload(file)
     data = await file.read()
+    # file.size can be absent depending on the client; re-check after reading.
+    if len(data) > settings.max_upload_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=messages.file_too_large(settings.max_upload_mb),
+        )
     try:
         await profile_service.process_cv(
             db,
