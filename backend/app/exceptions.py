@@ -22,6 +22,14 @@ class GoogleAuthError(Exception):
     """Google sign-in could not be completed."""
 
 
+class ProfileNotFoundError(Exception):
+    """The user has no profile yet (onboarding has not started)."""
+
+
+class ProjectOwnershipError(Exception):
+    """A submitted project_id does not belong to the current profile."""
+
+
 class DocumentParseError(Exception):
     """The uploaded document could not be read or contained no extractable text."""
 

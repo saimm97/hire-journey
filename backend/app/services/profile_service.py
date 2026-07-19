@@ -8,6 +8,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app import messages
+from app.exceptions import ProfileNotFoundError, ProjectOwnershipError
 from app.models.company import Company
 from app.models.employment import EmploymentHistory
 from app.models.profile import Profile
@@ -15,6 +17,14 @@ from app.models.project import ProfileProject, ProfileProjectTechnology, Project
 from app.models.resume import Resume
 from app.models.technology import ProfileTechnology, Technology
 from app.schemas.extraction import EmploymentItem, ProjectItem, ResumeExtraction
+from app.schemas.profile import (
+    EmploymentEntry,
+    EmploymentRead,
+    PreferencesUpdate,
+    ProfileDetailsUpdate,
+    ProjectEntry,
+    ResumeMeta,
+)
 from app.schemas.project import ProjectRead
 from app.services import resume_service
 from app.utils import document_parser, llm, normalization, prompts
@@ -59,8 +69,21 @@ async def _load_profile(db: AsyncSession, user_id: int) -> Profile | None:
 async def _profile_id(db: AsyncSession, user_id: int) -> int:
     profile_id = await db.scalar(select(Profile.id).where(Profile.user_id == user_id))
     if profile_id is None:
-        raise ValueError(f"Profile for user {user_id} does not exist")
+        raise ProfileNotFoundError(messages.PROFILE_NOT_FOUND)
     return profile_id
+
+
+def is_onboarding_complete(profile: Profile) -> bool:
+    """The computed completion rule — intentionally never persisted."""
+    return bool(
+        profile.source_resume_id is not None
+        and _clean(profile.first_name)
+        and _clean(profile.last_name)
+        and _clean(profile.title)
+        and profile.desired_roles
+        and profile.work_modes_preferred
+        and _clean(profile.seniority_level)
+    )
 
 
 async def _get_or_create_technology(db: AsyncSession, name: str) -> Technology:
@@ -137,7 +160,9 @@ async def _get_or_create_company(db: AsyncSession, display_name: str) -> Company
     return company
 
 
-def _employment_dates(entry: EmploymentItem) -> tuple[date | None, date | None]:
+def _employment_dates(
+    entry: EmploymentItem | EmploymentEntry,
+) -> tuple[date | None, date | None]:
     start = normalization.normalize_month(entry.start_date)
     end = normalization.normalize_month(entry.end_date)
     if start and end and end < start:
@@ -148,7 +173,7 @@ def _employment_dates(entry: EmploymentItem) -> tuple[date | None, date | None]:
 
 
 async def replace_employments(
-    db: AsyncSession, profile_id: int, entries: list[EmploymentItem]
+    db: AsyncSession, profile_id: int, entries: list[EmploymentItem] | list[EmploymentEntry]
 ) -> None:
     """Replace the profile's employment rows.
 
@@ -245,7 +270,9 @@ async def _set_membership_technologies(
         )
 
 
-async def _create_membership(db: AsyncSession, profile_id: int, parsed: ProjectItem) -> None:
+async def _create_membership(
+    db: AsyncSession, profile_id: int, parsed: ProjectItem | ProjectEntry
+) -> None:
     project = Project(name=_clean(parsed.name))
     db.add(project)
     await db.flush()
@@ -326,27 +353,167 @@ def _resume_profile_values(extraction: ResumeExtraction) -> dict:
     }
 
 
-async def _latest_resume(db: AsyncSession, user_id: int) -> Resume | None:
-    return (
+async def _load_employments(db: AsyncSession, profile_id: int) -> list[EmploymentRead]:
+    rows = (
         await db.execute(
-            select(Resume)
-            .where(Resume.user_id == user_id)
-            .order_by(Resume.created_at.desc())
-            .limit(1)
+            select(EmploymentHistory, Company)
+            .join(Company, Company.id == EmploymentHistory.company_id)
+            .where(EmploymentHistory.profile_id == profile_id)
+            .order_by(EmploymentHistory.start_date.desc().nulls_last(), EmploymentHistory.id)
         )
-    ).scalar_one_or_none()
+    ).all()
+    return [
+        EmploymentRead(
+            id=employment.id,
+            company_name=company.name,
+            title=employment.title,
+            start_date=employment.start_date,
+            end_date=employment.end_date,
+            description=employment.description,
+        )
+        for employment, company in rows
+    ]
 
 
-async def get_profile(
+async def _source_resume_meta(db: AsyncSession, profile: Profile) -> ResumeMeta | None:
+    if profile.source_resume_id is None:
+        return None
+    resume = await db.get(Resume, profile.source_resume_id)
+    if resume is None:
+        return None
+    return ResumeMeta(
+        id=resume.id,
+        file_name=resume.file_name,
+        created_at=resume.created_at,
+        summary=(resume.parsed_content or {}).get("summary"),
+    )
+
+
+async def get_snapshot(
     db: AsyncSession, user_id: int
-) -> tuple[Profile, list[ProjectRead], str | None] | None:
+) -> tuple[Profile, ResumeMeta | None, list[EmploymentRead], list[ProjectRead]] | None:
+    """Everything the onboarding UI needs, or None when no profile exists."""
     profile = await _load_profile(db, user_id)
     if profile is None:
         return None
-    resume = await _latest_resume(db, user_id)
-    resume_summary = (resume.parsed_content or {}).get("summary") if resume else None
-    projects = await _load_projects(db, profile.id)
-    return profile, projects, resume_summary
+    return (
+        profile,
+        await _source_resume_meta(db, profile),
+        await _load_employments(db, profile.id),
+        await _load_projects(db, profile.id),
+    )
+
+
+async def save_projects(db: AsyncSession, profile_id: int, entries: list[ProjectEntry]) -> None:
+    """Reconcile the profile's projects against the edited full set.
+
+    project_id present -> edit (must belong to this profile); absent -> new
+    identity. Renaming a project shared with another profile copies-on-write
+    instead of mutating it. Omitted memberships are removed, and projects
+    left with no memberships are deleted.
+    """
+    memberships = {
+        project.id: (membership, project)
+        for membership, project in await _load_memberships(db, profile_id)
+    }
+    for entry in entries:
+        if entry.project_id is not None and entry.project_id not in memberships:
+            raise ProjectOwnershipError(messages.PROJECT_NOT_OWNED)
+
+    handled: set[int] = set()
+    for entry in entries:
+        if entry.project_id is None:
+            await _create_membership(db, profile_id, entry)
+            continue
+        membership, project = memberships[entry.project_id]
+        handled.add(entry.project_id)
+        name = entry.name.strip()
+        shared = bool(
+            await db.scalar(
+                select(func.count())
+                .select_from(ProfileProject)
+                .where(
+                    ProfileProject.project_id == project.id,
+                    ProfileProject.id != membership.id,
+                )
+            )
+        )
+        if shared and name != project.name:
+            # Copy-on-write: never rename a project another profile references.
+            await db.delete(membership)
+            await db.flush()
+            await _create_membership(db, profile_id, entry)
+            continue
+        project.name = name
+        membership.summary = _clean(entry.summary)
+        membership.github_url = entry.github_url
+        membership.deployed_url = entry.deployed_url
+        await db.flush()
+        await _set_membership_technologies(db, membership.id, entry.technologies)
+
+    for project_id in sorted(set(memberships) - handled):
+        membership, project = memberships[project_id]
+        await db.delete(membership)
+        await db.flush()
+        remaining = await db.scalar(
+            select(func.count())
+            .select_from(ProfileProject)
+            .where(ProfileProject.project_id == project_id)
+        )
+        if not remaining:
+            await db.delete(project)
+    await db.flush()
+
+
+async def save_details(db: AsyncSession, user_id: int, details: ProfileDetailsUpdate) -> None:
+    """Atomically persist the corrected details step (full replacement)."""
+    try:
+        profile_id = await _profile_id(db, user_id)  # 404 before any writes
+        links = {
+            "github_url": details.social_links.github_url,
+            "linkedin_url": details.social_links.linkedin_url,
+            "portfolio_url": details.social_links.portfolio_url,
+        }
+        fields = {
+            "first_name": _clean(details.first_name),
+            "last_name": _clean(details.last_name),
+            "phone_number": _clean(details.phone_number),
+            "location": _clean(details.location),
+            "title": _clean(details.title),
+            "summary": _clean(details.summary),
+            "social_links": {key: value for key, value in links.items() if value},
+            "education": [entry.model_dump(mode="json") for entry in details.education],
+            "certifications": [entry.model_dump(mode="json") for entry in details.certifications],
+        }
+        await upsert_profile(db, user_id, fields)
+        await set_profile_technologies(db, profile_id, details.technologies, replace=True)
+        await replace_employments(db, profile_id, details.employment_history)
+        await save_projects(db, profile_id, details.projects)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
+
+
+async def save_preferences(db: AsyncSession, user_id: int, preferences: PreferencesUpdate) -> None:
+    """Persist the preferences step (onboarding must have started)."""
+    try:
+        await _profile_id(db, user_id)  # 404 before any writes
+        await upsert_profile(
+            db,
+            user_id,
+            {
+                "minimum_salary": preferences.minimum_salary,
+                "desired_roles": preferences.desired_roles,
+                "desired_locations": preferences.desired_locations,
+                "work_modes_preferred": list(preferences.work_modes_preferred),
+                "seniority_level": preferences.seniority_level,
+            },
+        )
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
 
 
 async def update_profile(db: AsyncSession, user_id: int, fields: dict) -> Profile:

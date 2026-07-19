@@ -12,6 +12,9 @@ GOOGLE_EMAIL_UNVERIFIED = "Google email is not verified; cannot link account."
 GOOGLE_ACCOUNT_FAILED = "Could not create account from Google sign-in."
 
 
+PROFILE_NOT_FOUND = "Profile has not been created yet."
+PROJECT_NOT_OWNED = "One or more submitted projects do not belong to this profile."
+
 DOCUMENT_UNSUPPORTED = "Uploaded file must be a PDF or DOCX document."
 DOCUMENT_UNREADABLE = "The document could not be read; it may be corrupt or password-protected."
 DOCUMENT_NO_TEXT = (

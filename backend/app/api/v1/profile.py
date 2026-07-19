@@ -1,4 +1,4 @@
-"""Profile endpoints: build the user's profile from an uploaded resume."""
+"""Profile endpoints: resume upload, onboarding steps, and the snapshot read."""
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,33 +7,53 @@ from app import messages
 from app.api.deps import get_current_user
 from app.config import settings
 from app.database import get_db
-from app.exceptions import DocumentParseError, ExtractionError, LLMNotConfiguredError
+from app.exceptions import (
+    DocumentParseError,
+    ExtractionError,
+    LLMNotConfiguredError,
+    ProfileNotFoundError,
+    ProjectOwnershipError,
+)
 from app.models.profile import Profile
 from app.models.user import User
-from app.schemas.profile import CVUploadResult, ProfileRead, ProfileUpdate
+from app.schemas.profile import (
+    OnboardingSnapshot,
+    PreferencesUpdate,
+    ProfileDetailsUpdate,
+    ProfileRead,
+    ProfileUpdate,
+)
 from app.services import profile_service, resume_service
 from app.utils import document_parser
 
 router = APIRouter()
 
 
-@router.get("", response_model=CVUploadResult)
+async def _snapshot(db: AsyncSession, user: User) -> OnboardingSnapshot:
+    pieces = await profile_service.get_snapshot(db, user.id)
+    if pieces is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=messages.PROFILE_NOT_FOUND
+        )
+    profile, source_resume, employments, projects = pieces
+    profile_read = ProfileRead.model_validate(profile).model_copy(
+        update={"account_email": user.email}
+    )
+    return OnboardingSnapshot(
+        profile=profile_read,
+        source_resume=source_resume,
+        employment_history=employments,
+        projects=projects,
+        onboarding_complete=profile_service.is_onboarding_complete(profile),
+    )
+
+
+@router.get("", response_model=OnboardingSnapshot)
 async def read_profile(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> CVUploadResult:
-    snapshot = await profile_service.get_profile(db, current_user.id)
-    if snapshot is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Profile has not been created yet.",
-        )
-    profile, projects, resume_summary = snapshot
-    return CVUploadResult(
-        profile=ProfileRead.model_validate(profile),
-        resume_summary=resume_summary,
-        projects=projects,
-    )
+) -> OnboardingSnapshot:
+    return await _snapshot(db, current_user)
 
 
 @router.patch("", response_model=ProfileRead)
@@ -62,17 +82,17 @@ def _validate_upload(file: UploadFile) -> None:
         )
 
 
-@router.post("/cv", response_model=CVUploadResult, status_code=status.HTTP_201_CREATED)
+@router.post("/cv", response_model=OnboardingSnapshot, status_code=status.HTTP_201_CREATED)
 async def upload_cv(
     file: UploadFile = File(...),
     replace_resume_id: int | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> CVUploadResult:
+) -> OnboardingSnapshot:
     _validate_upload(file)
     data = await file.read()
     try:
-        profile, projects, summary = await profile_service.process_cv(
+        await profile_service.process_cv(
             db,
             current_user.id,
             file.filename or "cv.pdf",
@@ -93,8 +113,34 @@ async def upload_cv(
         ) from exc
     except ExtractionError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    return CVUploadResult(
-        profile=ProfileRead.model_validate(profile),
-        resume_summary=summary,
-        projects=projects,
-    )
+    return await _snapshot(db, current_user)
+
+
+@router.put("/details", response_model=OnboardingSnapshot)
+async def save_details(
+    payload: ProfileDetailsUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> OnboardingSnapshot:
+    try:
+        await profile_service.save_details(db, current_user.id, payload)
+    except ProfileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ProjectOwnershipError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    return await _snapshot(db, current_user)
+
+
+@router.put("/preferences", response_model=OnboardingSnapshot)
+async def save_preferences(
+    payload: PreferencesUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> OnboardingSnapshot:
+    try:
+        await profile_service.save_preferences(db, current_user.id, payload)
+    except ProfileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return await _snapshot(db, current_user)
