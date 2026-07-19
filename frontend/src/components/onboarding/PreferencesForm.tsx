@@ -1,12 +1,11 @@
 "use client"
 
-import { MapPin } from "lucide-react"
-
 import type { PreferencesState } from "@/hooks/usePreferences"
 import type { SeniorityLevel, WorkMode } from "@/lib/api/types"
 import { WORK_MODES } from "@/lib/api/types"
 import { cn } from "@/lib/utils"
-import { ChipInput } from "./ChipInput"
+import { Chip } from "./Chip"
+import { LazyLocationPicker } from "./LazyLocationPicker"
 import { MultiSelect } from "./MultiSelect"
 import { PillSelect, type PillOption } from "./PillSelect"
 import { SalaryField } from "./SalaryField"
@@ -56,14 +55,20 @@ export function PreferencesForm({ state }: { state: PreferencesState }) {
       </Section>
 
       <Section title="Desired locations">
-        <ChipInput
-          values={state.locations}
-          onAdd={state.addLocation}
-          onRemove={state.removeLocation}
-          placeholder="City, country, or region…"
-          icon={MapPin}
-          addLabel="Add location"
-        />
+        <div className="space-y-3">
+          <LazyLocationPicker buttonLabel="Add location" onSelect={state.addLocation} />
+          {state.locations.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {state.locations.map((value) => (
+                <Chip
+                  key={value}
+                  value={value}
+                  onRemove={() => state.removeLocation(value)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </Section>
 
       <Section title="Work modes">

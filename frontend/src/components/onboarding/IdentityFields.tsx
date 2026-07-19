@@ -1,9 +1,10 @@
 "use client"
 
-import { Lock } from "lucide-react"
+import { Lock, X } from "lucide-react"
 
 import type { Identity } from "@/hooks/useOnboardingProfile"
 import { Field } from "./Field"
+import { LazyLocationPicker } from "./LazyLocationPicker"
 import { TextField } from "./TextField"
 
 interface IdentityFieldsProps {
@@ -34,18 +35,34 @@ export function IdentityFields({ identity, accountEmail, onChange }: IdentityFie
         mono
       />
       <TextField
-        label="Location"
-        value={identity.location}
-        onChange={(value) => onChange("location", value)}
-        placeholder="City, Country"
-      />
-      <TextField
         label="Title"
         value={identity.title}
         onChange={(value) => onChange("title", value)}
         placeholder="e.g. Backend Engineer"
-        className="sm:col-span-2"
       />
+      <div className="space-y-2 sm:col-span-2">
+        <Field label="Location">
+          {identity.location ? (
+            <div className="flex items-center justify-between">
+              <span className="text-base text-brand-ink">{identity.location}</span>
+              <button
+                type="button"
+                onClick={() => onChange("location", "")}
+                aria-label="Clear location"
+                className="text-brand-muted hover:text-brand-ink"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+          ) : (
+            <p className="text-base text-brand-muted/60">Pick your location below</p>
+          )}
+        </Field>
+        <LazyLocationPicker
+          buttonLabel="Set location"
+          onSelect={(label) => onChange("location", label)}
+        />
+      </div>
       <Field
         label="Account email"
         badge={<Lock className="size-3 text-brand-muted" />}
