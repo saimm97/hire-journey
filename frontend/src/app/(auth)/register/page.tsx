@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input'
 import { loginWithPassword, registerUser } from '@/lib/api/auth'
 import { ApiError } from '@/lib/api/client'
 import { useAuth } from '@/lib/auth/AuthContext'
+import { postAuthDestination } from '@/lib/onboarding/routing'
 import { cn } from '@/lib/utils'
 
 // match with backend UserCreate constraints
@@ -70,7 +71,7 @@ export default function Register() {
       await registerUser(values) // 1. create account
       await loginWithPassword(values.email, values.password) // 2. auto-login
       await login() // 3. hydrate session
-      router.push('/')
+      router.push(await postAuthDestination()) // 4. new accounts land in onboarding
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'Something went wrong'
       form.setError('root', { message })

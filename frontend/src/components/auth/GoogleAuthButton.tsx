@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 
 import { googleLogin } from '@/lib/api/auth'
 import { useAuth } from '@/lib/auth/AuthContext'
+import { postAuthDestination } from '@/lib/onboarding/routing'
 
 /**
  * Shared "Continue with Google" block (divider + button + legal), used by both
@@ -21,7 +22,7 @@ export function GoogleAuthButton() {
     try {
       await googleLogin(credential)
       await login()
-      router.push('/')
+      router.push(await postAuthDestination())
     } catch (err) {
       console.error('Google login failed:', err)
     }

@@ -31,7 +31,10 @@ export async function apiRequest<T>(
 
   let payload: BodyInit | undefined
   if (body !== undefined) {
-    if (form) {
+    if (body instanceof FormData) {
+      // Multipart upload — the browser sets the Content-Type boundary itself.
+      payload = body
+    } else if (form) {
       headers['Content-Type'] = 'application/x-www-form-urlencoded'
       payload = new URLSearchParams(body as Record<string, string>).toString()
     } else {
