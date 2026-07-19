@@ -28,3 +28,15 @@ class PdfUnreadableError(Exception):
 
 class PdfNoTextError(Exception):
     """The PDF opened but contained no extractable text."""
+
+
+class DocumentParseError(Exception):
+    """The uploaded document could not be read or contained no extractable text."""
+
+
+class LLMNotConfiguredError(Exception):
+    """No LLM provider API key is configured; extraction cannot run."""
+
+
+class ExtractionError(Exception):
+    """Every configured LLM provider failed to return schema-valid data."""

@@ -33,11 +33,16 @@ dependencies = [
 
     # Resume parsing
     "pdfplumber>=0.11.0",
+    "PyMuPDF>=1.24.0",       # PDF text extraction (import: fitz)
+    "python-docx>=1.1.0",    # DOCX text extraction (import: docx)
 
     # AI / agents
     "langchain>=0.3.0",
     "langgraph>=0.2.0",
     "langchain-google-genai>=2.0.0",
+    # 1.x provider releases require langchain-core>=1.4 (conflicts with langchain 0.3)
+    "langchain-groq>=0.3.0,<1",
+    "langchain-openai>=0.3.0,<1",
 
     # Utilities
     "pyyaml>=6.0.0",

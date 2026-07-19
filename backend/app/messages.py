@@ -16,6 +16,14 @@ PDF_REQUIRED = "Uploaded file must be a PDF."
 PDF_UNREADABLE = "The PDF could not be read; it may be corrupt or password-protected."
 PDF_NO_TEXT = "No text could be extracted from the PDF (scanned images are not supported)."
 
+DOCUMENT_UNSUPPORTED = "Uploaded file must be a PDF or DOCX document."
+DOCUMENT_UNREADABLE = "The document could not be read; it may be corrupt or password-protected."
+DOCUMENT_NO_TEXT = (
+    "No text could be extracted from the document (scanned images are not supported)."
+)
+LLM_NOT_CONFIGURED = "Resume parsing is not configured on the server."
+EXTRACTION_FAILED = "Could not extract information from the resume. Please try again."
+
 
 def already_registered(field: str) -> str:
     return f"That {field} is already registered."
