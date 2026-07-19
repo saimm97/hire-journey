@@ -6,6 +6,7 @@ import { ApiError } from "@/lib/api/client"
 import { getOnboarding, savePreferences } from "@/lib/api/profile"
 import type { SeniorityLevel, WorkMode } from "@/lib/api/types"
 import { SENIORITY_LEVELS, WORK_MODES } from "@/lib/api/types"
+import { COMPLETED_DESTINATION } from "@/lib/onboarding/routing"
 import type { ToastData } from "@/components/onboarding/Toast"
 
 export type PreferencesStatus = "loading" | "ready"
@@ -47,7 +48,7 @@ export function usePreferences() {
           return
         }
         if (snapshot.onboarding_complete) {
-          setRedirectTo("/")
+          setRedirectTo(COMPLETED_DESTINATION)
           return
         }
         const { profile } = snapshot

@@ -9,6 +9,7 @@ import { PreferencesForm } from '@/components/onboarding/PreferencesForm'
 import { Toast } from '@/components/onboarding/Toast'
 import { WizardFooter } from '@/components/onboarding/WizardFooter'
 import { usePreferences } from '@/hooks/usePreferences'
+import { COMPLETED_DESTINATION } from '@/lib/onboarding/routing'
 
 export default function OnboardingPreferences() {
   const router = useRouter()
@@ -38,7 +39,7 @@ export default function OnboardingPreferences() {
           saving={state.saving}
           onBack={() => router.push('/onboarding/profile')}
           onSave={async () => {
-            if (await state.save()) router.push('/')
+            if (await state.save()) router.push(COMPLETED_DESTINATION)
           }}
         />
       )}

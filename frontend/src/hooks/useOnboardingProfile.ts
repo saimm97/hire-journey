@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react"
 import { ApiError } from "@/lib/api/client"
 import { getOnboarding, saveDetails, uploadCv as uploadCvRequest } from "@/lib/api/profile"
 import type { OnboardingSnapshot, ProfileDetailsPayload } from "@/lib/api/types"
+import { COMPLETED_DESTINATION } from "@/lib/onboarding/routing"
 import type { ToastData } from "@/components/onboarding/Toast"
 
 export type OnboardingStatus = "loading" | "empty" | "parsing" | "ready"
@@ -230,7 +231,7 @@ export function useOnboardingProfile() {
       .then((snapshot) => {
         if (!active) return
         if (!snapshot || !snapshot.source_resume) setStatus("empty")
-        else if (snapshot.onboarding_complete) setRedirectTo("/")
+        else if (snapshot.onboarding_complete) setRedirectTo(COMPLETED_DESTINATION)
         else hydrate(snapshot)
       })
       .catch((error) => {
