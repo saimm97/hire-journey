@@ -22,14 +22,6 @@ class GoogleAuthError(Exception):
     """Google sign-in could not be completed."""
 
 
-class PdfUnreadableError(Exception):
-    """The bytes could not be opened or read as a PDF."""
-
-
-class PdfNoTextError(Exception):
-    """The PDF opened but contained no extractable text."""
-
-
 class DocumentParseError(Exception):
     """The uploaded document could not be read or contained no extractable text."""
 

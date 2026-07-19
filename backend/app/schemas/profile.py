@@ -1,32 +1,11 @@
-"""Profile onboarding request, extraction, and response schemas."""
+"""Profile onboarding request and response schemas."""
 
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.project import ProjectRead
-
-
-class CVExtraction(BaseModel):
-    first_name: str | None = None
-    last_name: str | None = None
-    email: EmailStr | None = None
-    phone: str | None = None
-    linkedin_url: str | None = None
-    github_url: str | None = None
-    tech_stack: list[str] = Field(default_factory=list)
-    summary: str | None = None
-
-
-class LinkedInExtraction(BaseModel):
-    first_name: str | None = None
-    last_name: str | None = None
-    email: EmailStr | None = None
-    phone: str | None = None
-    linkedin_url: str | None = None
-    tech_stack: list[str] = Field(default_factory=list)
-    linkedin_summary: str | None = None
 
 
 class ProfileRead(BaseModel):
@@ -94,12 +73,4 @@ class ProfileUpdate(BaseModel):
 class CVUploadResult(BaseModel):
     profile: ProfileRead
     resume_summary: str | None
-    projects: list[ProjectRead]
-
-
-class LinkedInUploadResult(BaseModel):
-    profile: ProfileRead
-
-
-class ProjectsUploadResult(BaseModel):
     projects: list[ProjectRead]

@@ -3,10 +3,9 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.resume import Resume
 from app.models.user import User
-
-MAX_RESUMES_PER_USER = 2
 
 
 class ResumeLimitError(ValueError):
@@ -40,9 +39,9 @@ async def create_resume(
     existing = await db.scalar(
         select(func.count()).select_from(Resume).where(Resume.user_id == user_id)
     )
-    if existing >= MAX_RESUMES_PER_USER:
+    if existing >= settings.max_resumes_per_user:
         raise ResumeLimitError(
-            f"This account already has {MAX_RESUMES_PER_USER} resumes; "
+            f"This account already has {settings.max_resumes_per_user} resumes; "
             "replace or delete one before uploading."
         )
 

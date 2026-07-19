@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     groq_model: str = "llama-3.3-70b-versatile"
     # Uploads
     max_upload_mb: int = 5
+    max_resumes_per_user: int = 2
 
     @property
     def max_upload_bytes(self) -> int:

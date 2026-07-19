@@ -1,4 +1,4 @@
-"""Profile endpoints: build the user's profile from uploaded documents."""
+"""Profile endpoints: build the user's profile from an uploaded resume."""
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,17 +7,12 @@ from app import messages
 from app.api.deps import get_current_user
 from app.config import settings
 from app.database import get_db
-from app.exceptions import PdfNoTextError, PdfUnreadableError
+from app.exceptions import DocumentParseError, ExtractionError, LLMNotConfiguredError
 from app.models.profile import Profile
 from app.models.user import User
-from app.schemas.profile import (
-    CVUploadResult,
-    LinkedInUploadResult,
-    ProfileRead,
-    ProfileUpdate,
-    ProjectsUploadResult,
-)
-from app.services import pdf, profile_service, resume_service
+from app.schemas.profile import CVUploadResult, ProfileRead, ProfileUpdate
+from app.services import profile_service, resume_service
+from app.utils import document_parser
 
 router = APIRouter()
 
@@ -54,33 +49,17 @@ async def update_profile(
     )
 
 
-async def _validate_pdf(file: UploadFile) -> bytes:
+def _validate_upload(file: UploadFile) -> None:
+    if not document_parser.is_supported(file.filename or ""):
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=messages.DOCUMENT_UNSUPPORTED,
+        )
     if file.size and file.size > settings.max_upload_bytes:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=messages.file_too_large(settings.max_upload_mb),
         )
-    data = await file.read()
-    if not pdf.is_pdf(data):
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=messages.PDF_REQUIRED,
-        )
-    return data
-
-
-def _pdf_error_handler(exc: Exception) -> None:
-    if isinstance(exc, PdfUnreadableError):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=messages.PDF_UNREADABLE,
-        )
-    if isinstance(exc, PdfNoTextError):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=messages.PDF_NO_TEXT,
-        )
-    raise exc
 
 
 @router.post("/cv", response_model=CVUploadResult, status_code=status.HTTP_201_CREATED)
@@ -90,7 +69,8 @@ async def upload_cv(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CVUploadResult:
-    data = await _validate_pdf(file)
+    _validate_upload(file)
+    data = await file.read()
     try:
         profile, projects, summary = await profile_service.process_cv(
             db,
@@ -99,42 +79,22 @@ async def upload_cv(
             data,
             replace_resume_id=replace_resume_id,
         )
-        return CVUploadResult(
-            profile=ProfileRead.model_validate(profile),
-            resume_summary=summary,
-            projects=projects,
-        )
-    except Exception as exc:
-        if isinstance(exc, resume_service.ResumeLimitError):
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-        if isinstance(exc, resume_service.ResumeNotFoundError):
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-        _pdf_error_handler(exc)
-
-
-@router.post("/linkedin", response_model=LinkedInUploadResult, status_code=status.HTTP_201_CREATED)
-async def upload_linkedin(
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> LinkedInUploadResult:
-    data = await _validate_pdf(file)
-    try:
-        profile = await profile_service.process_linkedin(db, current_user.id, data)
-        return LinkedInUploadResult(profile=ProfileRead.model_validate(profile))
-    except Exception as exc:
-        _pdf_error_handler(exc)
-
-
-@router.post("/projects", response_model=ProjectsUploadResult, status_code=status.HTTP_201_CREATED)
-async def upload_projects(
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> ProjectsUploadResult:
-    data = await _validate_pdf(file)
-    try:
-        projects = await profile_service.process_projects_pdf(db, current_user.id, data)
-        return ProjectsUploadResult(projects=projects)
-    except Exception as exc:
-        _pdf_error_handler(exc)
+    except resume_service.ResumeLimitError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except resume_service.ResumeNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except DocumentParseError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    except LLMNotConfiguredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+    except ExtractionError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return CVUploadResult(
+        profile=ProfileRead.model_validate(profile),
+        resume_summary=summary,
+        projects=projects,
+    )

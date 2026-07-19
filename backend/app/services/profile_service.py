@@ -1,30 +1,35 @@
-"""Profile onboarding orchestration and document-derived data persistence."""
+"""Profile onboarding orchestration and resume-derived data persistence."""
 
 from collections.abc import Iterable
+from datetime import date
 
-from sqlalchemy import delete, exists, func, select, update
+from sqlalchemy import delete, exists, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.company import Company
+from app.models.employment import EmploymentHistory
 from app.models.profile import Profile
 from app.models.project import ProfileProject, ProfileProjectTechnology, Project
 from app.models.resume import Resume
 from app.models.technology import ProfileTechnology, Technology
-from app.schemas.profile import CVExtraction
-from app.schemas.project import ParsedProject, ProjectRead
-from app.services import linkedin_extract, pdf, project_extract, resume_service, text_extract
-
-_PROFILE_EXTRACTION_FIELDS = (
-    "first_name",
-    "last_name",
-    "phone_number",
-    "summary",
-)
+from app.schemas.extraction import EmploymentItem, ProjectItem, ResumeExtraction
+from app.schemas.project import ProjectRead
+from app.services import resume_service
+from app.utils import document_parser, llm, normalization, prompts
 
 
 def normalize_technology(value: str) -> str:
     return " ".join(value.strip().casefold().split())
+
+
+def _clean(value: str | None) -> str | None:
+    """Trimmed string, with blank collapsing to None."""
+    if value is None:
+        return None
+    value = value.strip()
+    return value or None
 
 
 async def upsert_profile(db: AsyncSession, user_id: int, fields: dict) -> None:
@@ -43,6 +48,10 @@ async def _load_profile(db: AsyncSession, user_id: int) -> Profile | None:
             select(Profile)
             .where(Profile.user_id == user_id)
             .options(selectinload(Profile.technologies).selectinload(ProfileTechnology.technology))
+            # The profile is written via Core statements (upsert), which bypass
+            # the ORM identity map; with expire_on_commit=False a previously
+            # loaded instance would otherwise be returned with stale attributes.
+            .execution_options(populate_existing=True)
         )
     ).scalar_one_or_none()
 
@@ -52,22 +61,6 @@ async def _profile_id(db: AsyncSession, user_id: int) -> int:
     if profile_id is None:
         raise ValueError(f"Profile for user {user_id} does not exist")
     return profile_id
-
-
-async def _merge_social_links(
-    db: AsyncSession, user_id: int, links: dict[str, str | None]
-) -> None:
-    clean_links = {key: value for key, value in links.items() if value}
-    if not clean_links:
-        return
-    await db.execute(
-        update(Profile)
-        .where(Profile.user_id == user_id)
-        .values(
-            social_links=Profile.social_links.op("||")(clean_links),
-            updated_at=func.now(),
-        )
-    )
 
 
 async def _get_or_create_technology(db: AsyncSession, name: str) -> Technology:
@@ -105,6 +98,90 @@ async def set_profile_technologies(
             )
         )
         await db.execute(statement)
+
+
+# ── Companies & employment ─────────────────────────────────────────────
+
+
+def _normalize_company_name(name: str) -> str:
+    """Collapse whitespace runs, preserving the display casing."""
+    return " ".join(name.split())
+
+
+async def _get_or_create_company(db: AsyncSession, display_name: str) -> Company:
+    """Case-insensitively reuse a company row, creating it if absent.
+
+    The companies table is shared with ATS scan targets, whose unique
+    constraint covers only the exact name — "Google" and "google" would both
+    pass. A transaction-scoped advisory lock keyed on the lowercase name
+    serializes concurrent first-inserts instead (no migration required).
+    Callers must resolve companies in sorted-name order so two uploads never
+    acquire overlapping locks in opposite order (deadlock).
+    """
+    key = display_name.lower()
+    await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(key))))
+    company = (
+        await db.execute(
+            select(Company)
+            .where(func.lower(Company.name) == key)
+            # deterministic pick: prefer the ATS-tracked row, then the oldest
+            .order_by(Company.slug.is_(None), Company.id)
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if company is not None:
+        return company
+    company = Company(name=display_name)
+    db.add(company)
+    await db.flush()
+    return company
+
+
+def _employment_dates(entry: EmploymentItem) -> tuple[date | None, date | None]:
+    start = normalization.normalize_month(entry.start_date)
+    end = normalization.normalize_month(entry.end_date)
+    if start and end and end < start:
+        # Contradictory order: treat both as unparseable rather than guessing
+        # (a null end alone would falsely mark the stint as current).
+        return None, None
+    return start, end
+
+
+async def replace_employments(
+    db: AsyncSession, profile_id: int, entries: list[EmploymentItem]
+) -> None:
+    """Replace the profile's employment rows.
+
+    Deletes employment rows only — companies are shared with the ATS scan
+    targets and are NEVER deleted here (unlike replace_projects, which
+    orphan-deletes projects it exclusively owns).
+    """
+    await db.execute(delete(EmploymentHistory).where(EmploymentHistory.profile_id == profile_id))
+    valid = [entry for entry in entries if _clean(entry.company_name) and _clean(entry.title)]
+    display_names: dict[str, str] = {}
+    for entry in valid:
+        display = _normalize_company_name(entry.company_name)
+        display_names.setdefault(display.lower(), display)
+    companies = {
+        key: await _get_or_create_company(db, display_names[key])
+        for key in sorted(display_names)  # sorted: consistent advisory-lock order
+    }
+    for entry in valid:
+        start_date, end_date = _employment_dates(entry)
+        db.add(
+            EmploymentHistory(
+                profile_id=profile_id,
+                company_id=companies[_normalize_company_name(entry.company_name).lower()].id,
+                title=_clean(entry.title),
+                start_date=start_date,
+                end_date=end_date,
+                description=_clean(entry.description),
+            )
+        )
+    await db.flush()
+
+
+# ── Projects ───────────────────────────────────────────────────────────
 
 
 def _project_read(membership: ProfileProject, project: Project) -> ProjectRead:
@@ -168,26 +245,24 @@ async def _set_membership_technologies(
         )
 
 
-async def _create_membership(
-    db: AsyncSession, profile_id: int, parsed: ParsedProject
-) -> None:
-    project = Project(name=parsed.name)
+async def _create_membership(db: AsyncSession, profile_id: int, parsed: ProjectItem) -> None:
+    project = Project(name=_clean(parsed.name))
     db.add(project)
     await db.flush()
     membership = ProfileProject(
         profile_id=profile_id,
         project_id=project.id,
-        summary=parsed.summary,
-        github_url=parsed.github_url,
-        deployed_url=parsed.deployed_url,
+        summary=_clean(parsed.summary),
+        github_url=normalization.normalize_url(parsed.github_url),
+        deployed_url=normalization.normalize_url(parsed.deployed_url),
     )
     db.add(membership)
     await db.flush()
-    await _set_membership_technologies(db, membership.id, parsed.tech_stack)
+    await _set_membership_technologies(db, membership.id, parsed.technologies)
 
 
 async def replace_projects(
-    db: AsyncSession, profile_id: int, projects: list[ParsedProject]
+    db: AsyncSession, profile_id: int, projects: list[ProjectItem]
 ) -> None:
     """Replace a profile's project memberships and remove unreferenced projects."""
     old_project_ids = list(
@@ -206,17 +281,49 @@ async def replace_projects(
             )
         )
     for parsed in projects:
-        await _create_membership(db, profile_id, parsed)
+        if _clean(parsed.name):
+            await _create_membership(db, profile_id, parsed)
 
 
-def _profile_values(extraction: CVExtraction) -> dict:
-    values = {
-        "first_name": extraction.first_name,
-        "last_name": extraction.last_name,
-        "phone_number": extraction.phone,
-        "summary": extraction.summary,
+# ── Resume upload orchestration ────────────────────────────────────────
+
+
+def _resume_profile_values(extraction: ResumeExtraction) -> dict:
+    """Map an extraction onto profile columns.
+
+    Every resume-derived key is always present, so a re-upload overwrites
+    stale values — clearing ones the new resume no longer contains. The
+    preference fields are never touched. Education/certification entries
+    without their required field are dropped here but survive verbatim in
+    resumes.parsed_content.
+    """
+    social_links = {
+        key: normalization.normalize_url(value)
+        for key, value in {
+            "github_url": extraction.github_url,
+            "linkedin_url": extraction.linkedin_url,
+            "portfolio_url": extraction.portfolio_url,
+        }.items()
     }
-    return {field: values[field] for field in _PROFILE_EXTRACTION_FIELDS if values.get(field)}
+    return {
+        "first_name": _clean(extraction.first_name),
+        "last_name": _clean(extraction.last_name),
+        "phone_number": _clean(extraction.phone_number),
+        "location": _clean(extraction.location),
+        "title": _clean(extraction.title),
+        "summary": _clean(extraction.summary),
+        "social_links": {key: value for key, value in social_links.items() if value},
+        "education": [
+            item.model_dump(mode="json")
+            for item in extraction.education
+            if _clean(item.institution)
+        ],
+        "certifications": [
+            item.model_dump(mode="json")
+            for item in extraction.certifications
+            if _clean(item.name)
+        ],
+    }
 
 
 async def _latest_resume(db: AsyncSession, user_id: int) -> Resume | None:
@@ -265,13 +372,16 @@ async def process_cv(
     data: bytes,
     replace_resume_id: int | None = None,
 ) -> tuple[Profile, list[ProjectRead], str | None]:
-    text_content = pdf.extract_text(data)
-    extraction = text_extract.extract_fields(text_content)
-    projects = project_extract.extract_projects(text_content)
-    parsed_content = {
-        **extraction.model_dump(mode="json"),
-        "projects": [project.model_dump(mode="json") for project in projects],
-    }
+    """Parse a resume, LLM-extract it, and persist everything in one transaction."""
+    # Parsing and extraction run BEFORE any DB writes: the LLM call takes
+    # seconds and must never execute while holding the user row lock.
+    text_content = document_parser.to_text(data, file_name)
+    extraction = await llm.structured_extract(
+        prompts.RESUME_EXTRACTION_SYSTEM, text_content, ResumeExtraction
+    )
+    # The raw, un-normalized extraction is preserved verbatim; persistence
+    # below normalizes and filters, but nothing is lost.
+    parsed_content = extraction.model_dump(mode="json")
 
     try:
         if replace_resume_id is None:
@@ -292,20 +402,13 @@ async def process_cv(
                 parsed_content=parsed_content,
             )
 
-        fields = _profile_values(extraction)
+        fields = _resume_profile_values(extraction)
         fields["source_resume_id"] = resume.id
         await upsert_profile(db, user_id, fields)
-        await _merge_social_links(
-            db,
-            user_id,
-            {
-                "linkedin_url": extraction.linkedin_url,
-                "github_url": extraction.github_url,
-            },
-        )
         profile_id = await _profile_id(db, user_id)
-        await set_profile_technologies(db, profile_id, extraction.tech_stack, replace=False)
-        await replace_projects(db, profile_id, projects)
+        await set_profile_technologies(db, profile_id, extraction.technologies, replace=True)
+        await replace_employments(db, profile_id, extraction.employment_history)
+        await replace_projects(db, profile_id, extraction.projects)
         await db.commit()
     except Exception:
         await db.rollback()
@@ -315,49 +418,3 @@ async def process_cv(
     assert profile is not None
     projects = await _load_projects(db, profile.id)
     return profile, projects, extraction.summary
-
-
-async def process_linkedin(db: AsyncSession, user_id: int, data: bytes) -> Profile:
-    text_content = pdf.extract_text(data)
-    extraction = linkedin_extract.extract_fields(text_content)
-    fields = {
-        key: value
-        for key, value in {
-            "first_name": extraction.first_name,
-            "last_name": extraction.last_name,
-            "phone_number": extraction.phone,
-        }.items()
-        if value
-    }
-
-    try:
-        await upsert_profile(db, user_id, fields)
-        await _merge_social_links(db, user_id, {"linkedin_url": extraction.linkedin_url})
-        profile_id = await _profile_id(db, user_id)
-        await set_profile_technologies(db, profile_id, extraction.tech_stack, replace=False)
-        await db.commit()
-    except Exception:
-        await db.rollback()
-        raise
-
-    profile = await _load_profile(db, user_id)
-    assert profile is not None
-    return profile
-
-
-async def process_projects_pdf(
-    db: AsyncSession, user_id: int, data: bytes
-) -> list[ProjectRead]:
-    text_content = pdf.extract_text(data)
-    projects = project_extract.extract_projects(text_content, section_only=False)
-
-    try:
-        await upsert_profile(db, user_id, {})
-        profile_id = await _profile_id(db, user_id)
-        await replace_projects(db, profile_id, projects)
-        await db.commit()
-    except Exception:
-        await db.rollback()
-        raise
-
-    return await _load_projects(db, profile_id)
