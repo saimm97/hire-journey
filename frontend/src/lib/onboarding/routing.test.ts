@@ -25,7 +25,7 @@ describe('onboardingDestination', () => {
     expect(onboardingDestination(makeSnapshot())).toBe('/onboarding/preferences')
   })
 
-  it('sends completed users into the app', () => {
-    expect(onboardingDestination(makeSnapshot({ onboarding_complete: true }))).toBe('/')
+  it('sends completed users to the dashboard', () => {
+    expect(onboardingDestination(makeSnapshot({ onboarding_complete: true }))).toBe('/dashboard')
   })
 })

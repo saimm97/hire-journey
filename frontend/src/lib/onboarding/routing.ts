@@ -1,11 +1,8 @@
 import { getOnboarding } from '@/lib/api/profile'
 import type { OnboardingSnapshot } from '@/lib/api/types'
 
-/**
- * Where fully-onboarded users land. Point this at the dashboard route once
- * that page exists — every redirect below follows automatically.
- */
-export const COMPLETED_DESTINATION = '/'
+/** Where fully-onboarded users land. */
+export const COMPLETED_DESTINATION = '/dashboard'
 
 /**
  * The single routing rule for onboarding — used by the post-auth redirect and

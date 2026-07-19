@@ -117,11 +117,22 @@ function useListController<T>(makeEmpty: () => T): ListController<T> & {
   }
 }
 
+export interface OnboardingProfileOptions {
+  /** Redirect completed users away (wizard behavior). Pass false on the edit page. */
+  guardCompleted?: boolean
+  /** Success toast after saving — for pages that stay put instead of navigating. */
+  successMessage?: string
+}
+
 /**
  * Owns the details step: load or parse a profile, edit every extracted section
  * locally, then persist via PUT /profile/details. Pages stay presentational.
+ * Also powers the post-onboarding profile editor via {@link OnboardingProfileOptions}.
  */
-export function useOnboardingProfile() {
+export function useOnboardingProfile({
+  guardCompleted = true,
+  successMessage,
+}: OnboardingProfileOptions = {}) {
   const [status, setStatus] = useState<OnboardingStatus>("loading")
   const [redirectTo, setRedirectTo] = useState<string | null>(null)
   const [identity, setIdentity] = useState<Identity>(EMPTY_IDENTITY)
@@ -231,7 +242,8 @@ export function useOnboardingProfile() {
       .then((snapshot) => {
         if (!active) return
         if (!snapshot || !snapshot.source_resume) setStatus("empty")
-        else if (snapshot.onboarding_complete) setRedirectTo(COMPLETED_DESTINATION)
+        else if (snapshot.onboarding_complete && guardCompleted)
+          setRedirectTo(COMPLETED_DESTINATION)
         else hydrate(snapshot)
       })
       .catch((error) => {
@@ -242,7 +254,7 @@ export function useOnboardingProfile() {
     return () => {
       active = false
     }
-  }, [hydrate])
+  }, [hydrate, guardCompleted])
 
   const uploadCv = useCallback(
     async (file: File) => {
@@ -355,6 +367,7 @@ export function useOnboardingProfile() {
         technologies,
       }
       hydrate(await saveDetails(payload))
+      if (successMessage) setToast({ variant: "success", message: successMessage })
       return true
     } catch (error) {
       setToast({ variant: "error", message: messageOf(error) })
@@ -373,6 +386,7 @@ export function useOnboardingProfile() {
     projects.items,
     technologies,
     hydrate,
+    successMessage,
   ])
 
   return {

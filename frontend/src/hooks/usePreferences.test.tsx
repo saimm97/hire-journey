@@ -47,10 +47,23 @@ describe('usePreferences', () => {
     await waitFor(() => expect(result.current.redirectTo).toBe('/onboarding/profile'))
   })
 
-  it('redirects completed users into the app', async () => {
+  it('redirects completed users to the dashboard', async () => {
     getOnboardingMock.mockResolvedValue(makeSnapshot({ onboarding_complete: true }))
     const { result } = renderHook(() => usePreferences())
-    await waitFor(() => expect(result.current.redirectTo).toBe('/'))
+    await waitFor(() => expect(result.current.redirectTo).toBe('/dashboard'))
+  })
+
+  it('edit mode hydrates completed users instead of redirecting', async () => {
+    getOnboardingMock.mockResolvedValue(
+      makeSnapshot({
+        onboarding_complete: true,
+        profile: makeProfile({ desired_roles: ['Backend'], seniority_level: 'senior' }),
+      }),
+    )
+    const { result } = renderHook(() => usePreferences({ guardCompleted: false }))
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.redirectTo).toBeNull()
+    expect(result.current.roles).toEqual(['Backend'])
   })
 
   it('blocks saving until the step requirements are met', async () => {

@@ -27,6 +27,20 @@ describe('useOnboardingProfile', () => {
     await waitFor(() => expect(result.current.status).toBe('empty'))
   })
 
+  it('redirects completed users to the dashboard in wizard mode', async () => {
+    getOnboardingMock.mockResolvedValue(makeSnapshot({ onboarding_complete: true }))
+    const { result } = renderHook(() => useOnboardingProfile())
+    await waitFor(() => expect(result.current.redirectTo).toBe('/dashboard'))
+  })
+
+  it('edit mode hydrates completed users instead of redirecting', async () => {
+    getOnboardingMock.mockResolvedValue(makeSnapshot({ onboarding_complete: true }))
+    const { result } = renderHook(() => useOnboardingProfile({ guardCompleted: false }))
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.redirectTo).toBeNull()
+    expect(result.current.identity.first_name).toBe('Jane')
+  })
+
   it('hydrates every section from the snapshot', async () => {
     getOnboardingMock.mockResolvedValue(
       makeSnapshot({

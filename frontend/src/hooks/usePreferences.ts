@@ -22,11 +22,21 @@ const addUnique = (values: string[], value: string): string[] => {
     : [...values, trimmed]
 }
 
+export interface PreferencesOptions {
+  /** Redirect completed users away (wizard behavior). Pass false on the edit page. */
+  guardCompleted?: boolean
+  /** Success toast after saving — for pages that stay put instead of navigating. */
+  successMessage?: string
+}
+
 /**
  * Owns the preferences step: hydrate from the snapshot, edit locally, persist
  * via PUT /profile/preferences. Redirect decisions surface as `redirectTo`.
  */
-export function usePreferences() {
+export function usePreferences({
+  guardCompleted = true,
+  successMessage,
+}: PreferencesOptions = {}) {
   const [status, setStatus] = useState<PreferencesStatus>("loading")
   const [redirectTo, setRedirectTo] = useState<string | null>(null)
   const [roles, setRoles] = useState<string[]>([])
@@ -47,7 +57,7 @@ export function usePreferences() {
           setRedirectTo("/onboarding/profile")
           return
         }
-        if (snapshot.onboarding_complete) {
+        if (snapshot.onboarding_complete && guardCompleted) {
           setRedirectTo(COMPLETED_DESTINATION)
           return
         }
@@ -73,7 +83,7 @@ export function usePreferences() {
     return () => {
       active = false
     }
-  }, [])
+  }, [guardCompleted])
 
   const toggleWorkMode = useCallback((mode: WorkMode) => {
     setWorkModes((prev) =>
@@ -110,6 +120,7 @@ export function usePreferences() {
         })
         return false
       }
+      if (successMessage) setToast({ variant: "success", message: successMessage })
       return true
     } catch (error) {
       setToast({ variant: "error", message: messageOf(error) })
@@ -117,7 +128,7 @@ export function usePreferences() {
     } finally {
       setSaving(false)
     }
-  }, [roles, locations, workModes, seniority, minimumSalary])
+  }, [roles, locations, workModes, seniority, minimumSalary, successMessage])
 
   return {
     status,
