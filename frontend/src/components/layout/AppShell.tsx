@@ -1,12 +1,13 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import type { ReactNode } from "react"
 import {
   Briefcase,
   FileText,
   LayoutGrid,
+  LogOut,
   Plus,
   Search,
   Sparkles,
@@ -37,7 +38,13 @@ const ITEM = "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-co
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
-  const { user } = useAuth()
+  const router = useRouter()
+  const { user, logout } = useAuth()
+
+  async function handleLogout() {
+    await logout()
+    router.replace("/login")
+  }
 
   return (
     <div className="flex min-h-screen bg-brand-paper">
@@ -86,15 +93,24 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="mt-auto flex items-center gap-3 border-t border-brand-border px-2 pt-4">
-          <span className="flex size-9 items-center justify-center rounded-full bg-brand-violet/10 font-display font-semibold text-brand-violet">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-violet/10 font-display font-semibold text-brand-violet">
             {user?.username?.[0]?.toUpperCase() ?? "?"}
           </span>
-          <span className="min-w-0">
+          <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium text-brand-ink">
               {user?.username ?? "…"}
             </span>
             <span className="block truncate text-xs text-brand-muted">{user?.email}</span>
           </span>
+          <button
+            type="button"
+            onClick={handleLogout}
+            title="Log out"
+            aria-label="Log out"
+            className="shrink-0 rounded-lg p-2 text-brand-muted transition-colors hover:bg-white hover:text-brand-coral"
+          >
+            <LogOut className="size-4" />
+          </button>
         </div>
       </aside>
 
