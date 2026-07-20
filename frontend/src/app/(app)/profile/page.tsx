@@ -8,9 +8,9 @@ import { PreferencesForm } from '@/components/onboarding/PreferencesForm'
 import { ProfileForm } from '@/components/onboarding/ProfileForm'
 import { ResumeDropzone } from '@/components/onboarding/ResumeDropzone'
 import { Toast } from '@/components/onboarding/Toast'
-import { AppShell } from '@/components/layout/AppShell'
 import { useOnboardingProfile } from '@/hooks/useOnboardingProfile'
 import { usePreferences } from '@/hooks/usePreferences'
+import { useProfile } from '@/hooks/useProfile'
 
 const SAVE_BUTTON =
   'inline-flex items-center gap-2 rounded-full bg-brand-coral px-6 py-2.5 font-semibold ' +
@@ -27,14 +27,24 @@ export default function ProfilePage() {
     guardCompleted: false,
     successMessage: 'Preferences saved.',
   })
+  const { refresh } = useProfile()
 
   // Un-onboarded visitors get sent back into the wizard.
   useEffect(() => {
     if (preferences.redirectTo) router.replace(preferences.redirectTo)
   }, [preferences.redirectTo, router])
 
+  // After a successful save, re-pull the shared cache so the dashboard
+  // greeting and any other consumer reflect the edit.
+  const saveDetails = async () => {
+    if (await details.saveAndContinue()) refresh()
+  }
+  const savePreferences = async () => {
+    if (await preferences.save()) refresh()
+  }
+
   return (
-    <AppShell>
+    <>
       <div className="mb-8 space-y-1">
         <h1 className="font-display text-3xl font-semibold text-brand-ink">Your profile</h1>
         <p className="text-brand-muted">
@@ -57,7 +67,7 @@ export default function ProfilePage() {
             <div className="flex justify-end">
               <button
                 type="button"
-                onClick={details.saveAndContinue}
+                onClick={saveDetails}
                 disabled={details.saving}
                 className={SAVE_BUTTON}
               >
@@ -77,7 +87,7 @@ export default function ProfilePage() {
             <div className="flex justify-end">
               <button
                 type="button"
-                onClick={preferences.save}
+                onClick={savePreferences}
                 disabled={preferences.saving}
                 className={SAVE_BUTTON}
               >
@@ -91,6 +101,6 @@ export default function ProfilePage() {
 
       <Toast toast={details.toast} onDismiss={details.dismissToast} />
       <Toast toast={preferences.toast} onDismiss={preferences.dismissToast} />
-    </AppShell>
+    </>
   )
 }

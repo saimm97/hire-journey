@@ -1,6 +1,7 @@
 "use client"
 
 import { useAuth } from "@/lib/auth/AuthContext"
+import { useProfile } from "@/hooks/useProfile"
 
 const QUOTES = [
   "Every application is a rep. Reps compound.",
@@ -24,11 +25,14 @@ function quoteOfTheDay(): string {
 /** Greeting + a bit of encouragement, rotating daily. */
 export function WelcomeBanner() {
   const { user } = useAuth()
+  const { profile } = useProfile()
+  // Prefer the parsed first name; fall back to the account username.
+  const name = profile?.first_name?.trim() || user?.username
 
   return (
     <div className="space-y-3">
       <h1 className="font-display text-3xl font-semibold text-brand-ink">
-        Welcome back{user ? `, ${user.username}` : ""}.
+        Welcome back{name ? `, ${name}` : ""}.
       </h1>
       <p className="max-w-xl text-lg text-brand-muted">{quoteOfTheDay()}</p>
     </div>
