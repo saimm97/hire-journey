@@ -34,7 +34,7 @@ export default function ProfilePage() {
   }, [preferences.redirectTo, router])
 
   return (
-    <AppShell active="profile">
+    <AppShell>
       <div className="mb-8 space-y-1">
         <h1 className="font-display text-3xl font-semibold text-brand-ink">Your profile</h1>
         <p className="text-brand-muted">
