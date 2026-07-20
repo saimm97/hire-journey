@@ -21,7 +21,7 @@ import { Input } from '@/components/ui/input'
 import { loginWithPassword } from '@/lib/api/auth'
 import { ApiError } from '@/lib/api/client'
 import { useAuth } from '@/lib/auth/AuthContext'
-import { postAuthDestination } from '@/lib/onboarding/routing'
+import { COMPLETED_DESTINATION } from '@/lib/onboarding/routing'
 import { cn } from '@/lib/utils'
 
 const schema = z.object({
@@ -49,7 +49,9 @@ export default function Login() {
     try {
       await loginWithPassword(values.identifier, values.password)
       await login()
-      router.push(await postAuthDestination())
+      // Returning users default to the dashboard; they can reach onboarding
+      // from the Profile page if their profile is still incomplete.
+      router.push(COMPLETED_DESTINATION)
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'Something went wrong'
       form.setError('root', { message })

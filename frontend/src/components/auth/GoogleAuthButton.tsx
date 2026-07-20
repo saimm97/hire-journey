@@ -22,6 +22,8 @@ export function GoogleAuthButton() {
     try {
       await googleLogin(credential)
       await login()
+      // Google serves both sign-up and sign-in: new users go to onboarding,
+      // returning users to the dashboard.
       router.push(await postAuthDestination())
     } catch (err) {
       console.error('Google login failed:', err)
