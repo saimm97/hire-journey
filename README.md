@@ -226,6 +226,7 @@ pytest
 ## Documentation
 
 - [Documentation index](docs/README.md)
+- [End-to-end user onboarding flow](docs/architecture/user-onboarding-flow.md)
 - [Current database schema and ERD](docs/architecture/database-schema.md)
 - [Architecture decisions](docs/adr/)
 

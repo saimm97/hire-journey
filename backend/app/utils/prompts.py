@@ -12,7 +12,9 @@ Rules:
 - Leave a field null or empty when it is not in the document rather than guessing.
 - `title` is the candidate's current or most recent professional title.
 - `location` is the candidate's own city/country, not an employer's address.
-- `technologies` is a flat list of individual technologies, languages, and tools.
+- `technologies` is the candidate's complete skill set: every individual
+  technology, language, and tool mentioned ANYWHERE in the resume - the skills
+  section, project descriptions, and work experience alike - de-duplicated.
 - Social links: capture GitHub, LinkedIn, and portfolio/personal-site URLs exactly
   as written; a bare domain without a scheme is fine.
 - Dates use `YYYY-MM` format; use `YYYY` alone when the document gives only a year.

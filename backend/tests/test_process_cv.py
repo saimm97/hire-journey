@@ -106,8 +106,13 @@ async def test_upload_populates_all_tables(db, test_user, monkeypatch):
         # JSONB entries missing their required field are dropped
         assert len(profile.education) == 1
         assert profile.education[0]["institution"] == "TU Berlin"
-        # technologies lowercased and deduplicated
-        assert sorted(link.name for link in profile.technologies) == ["fastapi", "python"]
+        # profile_technologies is the overall skill set: the top-level list
+        # unioned with every project's tech (langchain), lowercased and deduped
+        assert sorted(link.name for link in profile.technologies) == [
+            "fastapi",
+            "langchain",
+            "python",
+        ]
         # source resume linked and raw extraction preserved (incl. dropped entries)
         resume = (
             await db.execute(select(Resume).where(Resume.id == profile.source_resume_id))

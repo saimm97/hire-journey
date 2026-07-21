@@ -607,7 +607,18 @@ async def process_cv(
         fields["source_resume_id"] = resume.id
         await upsert_profile(db, user_id, fields)
         profile_id = await _profile_id(db, user_id)
-        await set_profile_technologies(db, profile_id, extraction.technologies, replace=True)
+        # profile_technologies is the candidate's overall skill set, so it must
+        # be a superset of every project's tech — the LLM fills the top-level
+        # and per-project lists independently, so union them here rather than
+        # trusting it to hoist project-only tech up itself. (Order-stable
+        # de-dup; _get_or_create_technology normalizes casing on top of this.)
+        overall_technologies = list(
+            dict.fromkeys(
+                extraction.technologies
+                + [tech for project in extraction.projects for tech in project.technologies]
+            )
+        )
+        await set_profile_technologies(db, profile_id, overall_technologies, replace=True)
         await replace_employments(db, profile_id, extraction.employment_history)
         await replace_projects(db, profile_id, extraction.projects)
         await db.commit()
