@@ -14,7 +14,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.job import Job
 from app.schemas.search import JobResult, SearchResultsResponse
-from app.services import company_service, fetch_service, job_service, resume_service, score_service
+from app.services import company_service, fetch_service, job_service, profile_service, score_service
 
 
 async def run_scan(db: AsyncSession) -> int:
@@ -36,16 +36,19 @@ async def run_scan(db: AsyncSession) -> int:
 async def get_results(
     db: AsyncSession,
     user_id: int,
-    search_terms: list[str],
+    search_terms: list[str] | None = None,
     min_score: int = 0,
     limit: int = 20,
     offset: int = 0,
 ) -> SearchResultsResponse:
-    """Score all stored jobs against the terms + the user's resume skills, ranked."""
-    resume = await resume_service.latest_resume(db, user_id)
-    resume_skills: list[str] = []
-    if resume and resume.parsed_content:
-        resume_skills = [s for s in resume.parsed_content.get("skills", []) if isinstance(s, str)]
+    """Rank stored jobs for this user, scored entirely in memory.
+
+    Terms default to the user's ``desired_roles`` (the profile is the query);
+    an explicit ``search_terms`` overrides them, e.g. a search box. The user's
+    technologies are the scoring bonus. No profile / no terms → empty feed.
+    """
+    roles, technologies = await profile_service.get_match_preferences(db, user_id)
+    terms = search_terms if search_terms else roles
 
     jobs = (await db.execute(select(Job).options(selectinload(Job.company)))).scalars().all()
 
@@ -54,8 +57,8 @@ async def get_results(
             score_service.keyword_score(
                 title=job.title,
                 description=job.description or "",
-                search_terms=search_terms,
-                resume_skills=resume_skills,
+                search_terms=terms,
+                resume_skills=technologies,
             ),
             job,
         )

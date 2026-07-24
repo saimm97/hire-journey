@@ -71,9 +71,7 @@ async def test_oversized_llm_values_are_clipped_not_500(db, test_user, monkeypat
             title="🚀 " + "t" * 300,  # unicode + oversize together
             technologies=["k" * 150],
             employment_history=[EmploymentItem(company_name=long_company, title="T" * 300)],
-            projects=[
-                ProjectItem(name="P" * 300, github_url="https://example.com/" + "a" * 300)
-            ],
+            projects=[ProjectItem(name="P" * 300, github_url="https://example.com/" + "a" * 300)],
         ),
     )
     profile, projects, _ = await profile_service.process_cv(
@@ -86,9 +84,7 @@ async def test_oversized_llm_values_are_clipped_not_500(db, test_user, monkeypat
         assert all(len(link.name) <= 100 for link in profile.technologies)
         assert len(projects[0].name) == 255
         assert projects[0].github_url is None  # over-limit URL dropped, not truncated
-        company_name = await db.scalar(
-            select(Company.name).where(Company.name.like(f"L{marker}%"))
-        )
+        company_name = await db.scalar(select(Company.name).where(Company.name.like(f"L{marker}%")))
         assert len(company_name) == 255
     finally:
         await _cleanup_companies(db, profile.id, (f"L{marker} " + "x" * 300)[:255])
@@ -137,14 +133,10 @@ async def test_oversized_collections_rejected(client, db, test_user):
         "work_modes_preferred": ["remote"],
         "seniority_level": "senior",
     }
-    assert (
-        await client.put("/api/v1/profile/preferences", json=too_many_roles)
-    ).status_code == 422
+    assert (await client.put("/api/v1/profile/preferences", json=too_many_roles)).status_code == 422
 
     ancient_month = {
-        "employment_history": [
-            {"company_name": "X", "title": "Y", "start_date": "1850-01"}
-        ]
+        "employment_history": [{"company_name": "X", "title": "Y", "start_date": "1850-01"}]
     }
     assert (await client.put("/api/v1/profile/details", json=ancient_month)).status_code == 422
 

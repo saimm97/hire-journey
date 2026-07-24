@@ -20,9 +20,22 @@ export function ResumeDropzone({ onFile, parsing }: ResumeDropzoneProps) {
     if (file) onFile(file)
   }
 
+  const open = () => !parsing && inputRef.current?.click()
+
   return (
     <div
-      onClick={() => !parsing && inputRef.current?.click()}
+      role="button"
+      tabIndex={parsing ? -1 : 0}
+      aria-label="Upload resume (PDF or DOCX, up to 5MB)"
+      aria-disabled={parsing}
+      onClick={open}
+      onKeyDown={(event) => {
+        // Space/Enter activate a button; prevent Space from scrolling the page.
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault()
+          open()
+        }
+      }}
       onDragOver={(event) => {
         event.preventDefault()
         setDragging(true)
@@ -35,6 +48,7 @@ export function ResumeDropzone({ onFile, parsing }: ResumeDropzoneProps) {
       }}
       className={cn(
         "flex cursor-pointer flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed bg-white p-12 text-center shadow-[0_4px_20px_rgba(35,31,28,0.04)] transition-colors",
+        "focus-visible:border-brand-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-violet/40",
         dragging ? "border-brand-violet bg-brand-violet/5" : "border-brand-border hover:border-brand-violet/60",
       )}
     >
@@ -43,7 +57,13 @@ export function ResumeDropzone({ onFile, parsing }: ResumeDropzoneProps) {
         type="file"
         accept=".pdf,.docx"
         className="hidden"
-        onChange={(event) => pick(event.target.files)}
+        onClick={(event) => event.stopPropagation()}
+        onChange={(event) => {
+          pick(event.currentTarget.files)
+          // Selecting the same file after a timeout/failure must emit another
+          // change event. The File object passed above remains valid.
+          event.currentTarget.value = ""
+        }}
       />
       <div className="flex size-16 items-center justify-center rounded-full bg-brand-violet/10 text-brand-violet">
         {parsing ? <Loader2 className="size-8 animate-spin" /> : <UploadCloud className="size-8" />}

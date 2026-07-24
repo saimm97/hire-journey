@@ -1,11 +1,15 @@
 """Concurrency-safe resume creation and replacement."""
 
+import logging
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.resume import Resume
 from app.models.user import User
+
+logger = logging.getLogger(__name__)
 
 
 class ResumeLimitError(ValueError):
@@ -31,11 +35,39 @@ async def create_resume(
     raw_content: str | None,
     parsed_content: dict | None,
 ) -> Resume:
-    """Add a resume without committing, enforcing the per-user limit.
+    """Add or reuse a resume without committing, enforcing the per-user limit.
 
-    The newest resume (by created_at) is the one the app uses.
+    Exact same-content retries are idempotent. The user lock makes the lookup +
+    insert atomic, so two timed-out requests that finish concurrently cannot
+    consume both resume slots with the same document.
     """
     await _lock_user(db, user_id)
+
+    if raw_content:
+        existing_resume = (
+            await db.execute(
+                select(Resume)
+                .where(
+                    Resume.user_id == user_id,
+                    Resume.raw_content == raw_content,
+                )
+                .order_by(Resume.created_at.desc(), Resume.id.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if existing_resume is not None:
+            # Keep the latest successful extraction while preserving identity.
+            existing_resume.file_name = file_name
+            existing_resume.raw_content = raw_content
+            existing_resume.parsed_content = parsed_content
+            await db.flush()
+            logger.info(
+                "Reused identical resume [user_id=%s resume_id=%s]",
+                user_id,
+                existing_resume.id,
+            )
+            return existing_resume
+
     existing = await db.scalar(
         select(func.count()).select_from(Resume).where(Resume.user_id == user_id)
     )

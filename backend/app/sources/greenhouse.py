@@ -1,57 +1,53 @@
 import re
-from html import unescape
 
-import httpx
+from app.sources.base import BaseATSSource, RawJob, fetch_json, parse_datetime, strip_html
 
-from app.sources.base import RawJob, TIMEOUT, _HTML_TAG
-
-GREENHOUSE_LIST_API = "https://boards-api.greenhouse.io/v1/boards/{slug}/jobs"
+# content=true returns every posting's full description in the same response.
+# Without it the list API omits descriptions entirely and each one costs a
+# separate request — 405 requests instead of 1 on a board the size of Anthropic's.
+GREENHOUSE_LIST_API = "https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true"
 GREENHOUSE_JOB_API = "https://boards-api.greenhouse.io/v1/boards/{slug}/jobs/{job_id}"
 
 _JOB_ID_RE = re.compile(r"/jobs/(\d+)")
 
 
-class GreenhouseSource:
+class GreenhouseSource(BaseATSSource):
     name = "greenhouse"
+    hosts = ("boards.greenhouse.io", "job-boards.greenhouse.io")
 
-    async def fetch(self, company_slug: str, company_name: str) -> list[RawJob]:
-        url = GREENHOUSE_LIST_API.format(slug=company_slug)
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            response = await client.get(url)
-            response.raise_for_status()
-            data = response.json()
+    def _list_url(self, company_slug: str) -> str:
+        return GREENHOUSE_LIST_API.format(slug=company_slug)
 
-        jobs = []
-        for j in data.get("jobs", []):
-            jobs.append(RawJob(
-                title=j.get("title", ""),
-                url=j.get("absolute_url", ""),
-                company=company_name,
-                location=j.get("location", {}).get("name", ""),
-                source_name=self.name,
-            ))
-        return jobs
+    def _parse(self, raw: dict, company_name: str) -> RawJob | None:
+        url = raw.get("absolute_url", "")
+        if not url:
+            return None
+        return RawJob(
+            title=raw.get("title", ""),
+            url=url,
+            company=company_name,
+            location=(raw.get("location") or {}).get("name", ""),
+            description=strip_html(raw.get("content")),
+            source_name=self.name,
+            # first_published is set once at posting time and never moves.
+            # (updated_at also exists here — unused until we do change detection.)
+            posted_at=parse_datetime(raw.get("first_published")),
+            deadline=parse_datetime(raw.get("application_deadline")),
+        )
 
-    @staticmethod
-    async def fetch_description(company_slug: str, job_url: str) -> str | None:
-        """Fetch the full description for a single Greenhouse posting.
+    async def fetch_description(self, company_slug: str, job_url: str) -> str | None:
+        """Fetch one posting's description from the per-job endpoint.
 
-        The list API omits descriptions. This hits the individual job endpoint
-        using the job_id extracted from the posting URL.
+        Redundant now that fetch() requests content=true, but kept as the
+        contract's fallback for jobs stored before that change, and for boards
+        that return a posting without content.
         """
         match = _JOB_ID_RE.search(job_url)
         if not match:
             return None
-        job_id = match.group(1)
-        url = GREENHOUSE_JOB_API.format(slug=company_slug, job_id=job_id)
+        url = GREENHOUSE_JOB_API.format(slug=company_slug, job_id=match.group(1))
         try:
-            async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                data = response.json()
-            raw = data.get("content", "") or ""
-            # Greenhouse wraps HTML in HTML entities — unescape first, then strip tags
-            clean = _HTML_TAG.sub(" ", unescape(raw)).strip()
-            return clean or None
+            data = await fetch_json(url)
         except Exception:
             return None
+        return strip_html(data.get("content")) or None

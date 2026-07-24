@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
+import { OnboardingLoadError } from '@/components/onboarding/OnboardingLoadError'
 import { OnboardingShell } from '@/components/onboarding/OnboardingShell'
 import { PreferencesForm } from '@/components/onboarding/PreferencesForm'
 import { Toast } from '@/components/onboarding/Toast'
@@ -25,13 +26,15 @@ export default function OnboardingPreferences() {
       title="What are you looking for?"
       subtitle="Tell us your target roles and terms — this drives your job matches."
     >
-      {state.status === 'loading' ? (
+      {state.status === 'loading' && (
         <div className="flex items-center justify-center gap-2 py-24 text-brand-muted">
           <Loader2 className="size-5 animate-spin" /> Loading…
         </div>
-      ) : (
-        <PreferencesForm state={state} />
       )}
+      {state.status === 'load_error' && (
+        <OnboardingLoadError message={state.loadError} onRetry={state.retry} />
+      )}
+      {state.status === 'ready' && <PreferencesForm state={state} />}
       {state.status === 'ready' && (
         <WizardFooter
           label="Finish setup"

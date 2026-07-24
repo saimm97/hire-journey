@@ -23,7 +23,12 @@ export function uploadCv(
   const body = new FormData()
   body.append('file', file)
   const query = replaceResumeId ? `?replace_resume_id=${replaceResumeId}` : ''
-  return apiRequest<OnboardingSnapshot>(`/profile/cv${query}`, { method: 'POST', body })
+  // Parsing + LLM extraction runs synchronously in this request; allow more time.
+  return apiRequest<OnboardingSnapshot>(`/profile/cv${query}`, {
+    method: 'POST',
+    body,
+    timeoutMs: 120_000,
+  })
 }
 
 /** Save the corrected details step (full replacement of profile-owned collections). */

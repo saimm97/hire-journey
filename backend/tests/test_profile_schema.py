@@ -1,6 +1,5 @@
 """Focused tests for the onboarding profile schema and normalization rules."""
 
-
 from app.database import Base
 from app.models import (
     EmploymentHistory,
@@ -52,8 +51,6 @@ def test_onboarding_tables_are_registered_with_expected_names():
 
 def test_removed_profile_and_project_fields_are_not_in_metadata():
     assert {"salary_currency", "salary_period"}.isdisjoint(Profile.__table__.columns.keys())
-    assert {"role", "contribution_summary"}.isdisjoint(
-        ProfileProject.__table__.columns.keys()
-    )
+    assert {"role", "contribution_summary"}.isdisjoint(ProfileProject.__table__.columns.keys())
     assert "job_notes" not in Base.metadata.tables
     assert "applications" not in Base.metadata.tables

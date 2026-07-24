@@ -6,6 +6,7 @@ tool-calling against the given Pydantic schema and returns a validated
 instance, retrying with the validation error fed back into the prompt.
 """
 
+import logging
 from typing import TypeVar
 
 from pydantic import BaseModel
@@ -13,6 +14,8 @@ from pydantic import BaseModel
 from app import messages
 from app.config import settings
 from app.exceptions import ExtractionError, LLMNotConfiguredError
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -90,4 +93,7 @@ async def structured_extract(
             "Return ONLY valid data conforming to the schema."
         )
 
-    raise ExtractionError(f"{messages.EXTRACTION_FAILED} ({last_error})")
+    # Log the provider error internally; the exception message reaches the user,
+    # so it must not carry raw provider/exception text.
+    logger.warning("Structured extraction exhausted retries; last error: %r", last_error)
+    raise ExtractionError(messages.EXTRACTION_FAILED)

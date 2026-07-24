@@ -1,6 +1,6 @@
 "use client"
 
-import { FileCheck2, RefreshCw } from "lucide-react"
+import { FileCheck2, Loader2, RefreshCw } from "lucide-react"
 
 import type { OnboardingProfileState } from "@/hooks/useOnboardingProfile"
 import { AutoFilledBadge } from "./AutoFilledBadge"
@@ -38,11 +38,16 @@ export function ProfileForm({ state }: { state: OnboardingProfileState }) {
           identity={state.identity}
           accountEmail={state.accountEmail}
           onChange={state.setIdentityField}
+          fieldError={state.fieldError}
         />
       </Section>
 
       <Section title="Links">
-        <LinksFields links={state.socialLinks} onChange={state.setSocialLink} />
+        <LinksFields
+          links={state.socialLinks}
+          onChange={state.setSocialLink}
+          fieldError={state.fieldError}
+        />
       </Section>
 
       <ResumeSummary summary={state.summary} onChange={state.setSummary} />
@@ -54,23 +59,64 @@ export function ProfileForm({ state }: { state: OnboardingProfileState }) {
           onRemove={state.removeTechnology}
           placeholder="Add a technology…"
           addLabel="Add technology"
+          fieldPath="technologies"
+          error={state.fieldError("technologies")}
         />
       </Section>
 
-      <Section title="Employment history">
+      <Section
+        title="Employment history"
+        fieldPath="employment_history"
+        error={state.fieldError("employment_history")}
+      >
         <EmploymentEditor controller={state.employment} />
       </Section>
 
-      <Section title="Education">
+      <Section
+        title="Education"
+        fieldPath="education"
+        error={state.fieldError("education")}
+      >
         <EducationEditor controller={state.education} />
       </Section>
 
-      <Section title="Certifications">
+      <Section
+        title="Certifications"
+        fieldPath="certifications"
+        error={state.fieldError("certifications")}
+      >
         <CertificationEditor controller={state.certifications} />
       </Section>
 
-      <Section title="Projects">
-        <ProjectsEditor controller={state.projects} />
+      <Section
+        title="Projects"
+        fieldPath="projects"
+        error={state.projectConflict ?? state.fieldError("projects")}
+        action={
+          state.projectConflict ? (
+            <button
+              type="button"
+              onClick={() => void state.reloadProjects()}
+              disabled={state.reloadingProjects}
+              className="inline-flex items-center gap-1.5 rounded-full border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:border-red-500 disabled:cursor-wait disabled:opacity-60"
+            >
+              {state.reloadingProjects ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="size-3.5" />
+              )}
+              {state.reloadingProjects ? "Reloading projects…" : "Reload latest projects"}
+            </button>
+          ) : undefined
+        }
+      >
+        <fieldset
+          disabled={state.reloadingProjects}
+          aria-busy={state.reloadingProjects}
+          className="min-w-0 border-0 p-0 disabled:opacity-60"
+        >
+          <ProjectsEditor controller={state.projects} />
+        </fieldset>
       </Section>
     </div>
   )

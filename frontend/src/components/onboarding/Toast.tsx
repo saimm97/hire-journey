@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils"
 export interface ToastData {
   variant: "error" | "success"
   message: string
+  /** Support reference for unexpected failures (from the error envelope). */
+  requestId?: string
 }
 
 interface ToastProps {
@@ -39,7 +41,12 @@ export function Toast({ toast, onDismiss }: ToastProps) {
       ) : (
         <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-brand-emerald" />
       )}
-      <p className="text-sm text-brand-ink">{toast.message}</p>
+      <div className="space-y-0.5">
+        <p className="text-sm text-brand-ink">{toast.message}</p>
+        {toast.requestId && (
+          <p className="font-mono text-[10px] text-brand-muted">Reference: {toast.requestId}</p>
+        )}
+      </div>
       <button
         type="button"
         onClick={onDismiss}

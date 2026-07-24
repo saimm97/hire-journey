@@ -3,16 +3,24 @@
 import { useCallback, useEffect, useState } from "react"
 
 import { ApiError } from "@/lib/api/client"
+import { apiFieldErrors, groupError as matchGroupError, type FieldErrors } from "@/lib/api/fieldErrors"
 import { getOnboarding, savePreferences } from "@/lib/api/profile"
 import type { SeniorityLevel, WorkMode } from "@/lib/api/types"
 import { SENIORITY_LEVELS, WORK_MODES } from "@/lib/api/types"
 import { COMPLETED_DESTINATION } from "@/lib/onboarding/routing"
 import type { ToastData } from "@/components/onboarding/Toast"
 
-export type PreferencesStatus = "loading" | "ready"
+export type PreferencesStatus = "loading" | "ready" | "load_error"
 
 const messageOf = (error: unknown): string =>
   error instanceof ApiError ? error.message : "Something went wrong. Try again."
+
+/** An error toast that also surfaces the support reference on a 500. */
+const errorToast = (error: unknown): ToastData => ({
+  variant: "error",
+  message: messageOf(error),
+  requestId: error instanceof ApiError ? error.requestId : undefined,
+})
 
 const addUnique = (values: string[], value: string): string[] => {
   const trimmed = value.trim()
@@ -46,14 +54,44 @@ export function usePreferences({
   const [minimumSalary, setMinimumSalary] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<ToastData | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+
+  const clearFieldError = useCallback((key: string) => {
+    setFieldErrors((prev) => {
+      if (!(key in prev)) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }, [])
+
+  /** Mirror of the backend's required-field rules for immediate feedback. */
+  const validate = useCallback((): FieldErrors => {
+    const errors: FieldErrors = {}
+    if (!roles.length) errors.desired_roles = "Add at least one desired role."
+    if (!locations.length)
+      errors.desired_locations = "Add at least one desired location."
+    if (!workModes.length) errors.work_modes_preferred = "Pick at least one work mode."
+    if (!seniority) errors.seniority_level = "Pick your seniority level."
+    return errors
+  }, [roles, locations, workModes, seniority])
+
+  // Bumping this re-runs the load effect; retry() (an event handler) triggers it.
+  const [reloadNonce, setReloadNonce] = useState(0)
 
   useEffect(() => {
     let active = true
-    getOnboarding()
-      .then((snapshot) => {
+    void (async () => {
+      try {
+        const snapshot = await getOnboarding()
         if (!active) return
         // Deep link without a resume -> back to the profile step; done -> app.
         if (!snapshot || !snapshot.source_resume) {
+          setRedirectTo("/onboarding/profile")
+          return
+        }
+        if ((snapshot.completion_issues ?? []).some((issue) => issue.step === "profile")) {
           setRedirectTo("/onboarding/profile")
           return
         }
@@ -64,9 +102,11 @@ export function usePreferences({
         const { profile } = snapshot
         setRoles(profile.desired_roles)
         setLocations(profile.desired_locations)
-        setWorkModes(profile.work_modes_preferred.filter((m): m is WorkMode =>
-          (WORK_MODES as string[]).includes(m),
-        ))
+        setWorkModes(
+          profile.work_modes_preferred.filter((m): m is WorkMode =>
+            (WORK_MODES as string[]).includes(m),
+          ),
+        )
         setSeniority(
           (SENIORITY_LEVELS as string[]).includes(profile.seniority_level ?? "")
             ? (profile.seniority_level as SeniorityLevel)
@@ -74,36 +114,63 @@ export function usePreferences({
         )
         setMinimumSalary(profile.minimum_salary)
         setStatus("ready")
-      })
-      .catch((error) => {
+      } catch (error) {
         if (!active) return
-        setStatus("ready")
-        setToast({ variant: "error", message: messageOf(error) })
-      })
+        // Never render an empty editable form on a failed load: saving it would
+        // wipe stored salary/locations. Show a retry instead.
+        setLoadError(messageOf(error))
+        setStatus("load_error")
+      }
+    })()
     return () => {
       active = false
     }
-  }, [guardCompleted])
+  }, [guardCompleted, reloadNonce])
 
-  const toggleWorkMode = useCallback((mode: WorkMode) => {
-    setWorkModes((prev) =>
-      prev.includes(mode) ? prev.filter((m) => m !== mode) : [...prev, mode],
-    )
+  const retry = useCallback(() => {
+    setStatus("loading")
+    setLoadError(null)
+    setReloadNonce((n) => n + 1)
   }, [])
 
+  const toggleWorkMode = useCallback(
+    (mode: WorkMode) => {
+      setWorkModes((prev) =>
+        prev.includes(mode) ? prev.filter((m) => m !== mode) : [...prev, mode],
+      )
+      clearFieldError("work_modes_preferred")
+    },
+    [clearFieldError],
+  )
+
+  const selectSeniority = useCallback(
+    (value: SeniorityLevel | null) => {
+      setSeniority(value)
+      clearFieldError("seniority_level")
+    },
+    [clearFieldError],
+  )
+
+  const changeSalary = useCallback(
+    (value: number | null) => {
+      setMinimumSalary(value)
+      clearFieldError("minimum_salary")
+    },
+    [clearFieldError],
+  )
+
   const save = useCallback(async (): Promise<boolean> => {
-    if (!roles.length) {
-      setToast({ variant: "error", message: "Add at least one desired role." })
+    const invalid = validate()
+    if (Object.keys(invalid).length) {
+      setFieldErrors(invalid)
+      const count = Object.keys(invalid).length
+      setToast({
+        variant: "error",
+        message: `Fix the ${count} highlighted ${count === 1 ? "field" : "fields"}.`,
+      })
       return false
     }
-    if (!workModes.length) {
-      setToast({ variant: "error", message: "Pick at least one work mode." })
-      return false
-    }
-    if (!seniority) {
-      setToast({ variant: "error", message: "Pick your seniority level." })
-      return false
-    }
+    setFieldErrors({})
     setSaving(true)
     try {
       const snapshot = await savePreferences({
@@ -111,38 +178,59 @@ export function usePreferences({
         desired_roles: roles,
         desired_locations: locations,
         work_modes_preferred: workModes,
-        seniority_level: seniority,
+        seniority_level: seniority as SeniorityLevel,
       })
       if (!snapshot.onboarding_complete) {
+        const missingProfile = (snapshot.completion_issues ?? []).filter(
+          (issue) => issue.step === "profile",
+        )
         setToast({
           variant: "error",
-          message: "Almost there — finish your profile details first.",
+          message: missingProfile.length
+            ? `Finish your profile first: ${missingProfile
+                .map((issue) => issue.message)
+                .join(" ")}`
+            : "Some onboarding requirements are still incomplete. Review your details and try again.",
         })
         return false
       }
       if (successMessage) setToast({ variant: "success", message: successMessage })
       return true
     } catch (error) {
-      setToast({ variant: "error", message: messageOf(error) })
+      // Server-side field errors (e.g. an empty list slipped past the client)
+      // land on the exact section instead of a bare toast.
+      if (error instanceof ApiError && error.fields.length) setFieldErrors(apiFieldErrors(error))
+      setToast(errorToast(error))
       return false
     } finally {
       setSaving(false)
     }
-  }, [roles, locations, workModes, seniority, minimumSalary, successMessage])
+  }, [validate, roles, locations, workModes, seniority, minimumSalary, successMessage])
 
   return {
     status,
     redirectTo,
+    loadError,
+    retry,
     roles,
-    addRole: useCallback((value: string) => setRoles((prev) => addUnique(prev, value)), []),
+    addRole: useCallback(
+      (value: string) => {
+        setRoles((prev) => addUnique(prev, value))
+        clearFieldError("desired_roles")
+      },
+      [clearFieldError],
+    ),
     removeRole: useCallback(
       (value: string) => setRoles((prev) => prev.filter((v) => v !== value)),
       [],
     ),
     locations,
     addLocation: useCallback(
-      (value: string) => setLocations((prev) => addUnique(prev, value)),
-      [],
+      (value: string) => {
+        setLocations((prev) => addUnique(prev, value))
+        clearFieldError("desired_locations")
+      },
+      [clearFieldError],
     ),
     removeLocation: useCallback(
       (value: string) => setLocations((prev) => prev.filter((v) => v !== value)),
@@ -151,12 +239,15 @@ export function usePreferences({
     workModes,
     toggleWorkMode,
     seniority,
-    setSeniority,
+    setSeniority: selectSeniority,
     minimumSalary,
-    setMinimumSalary,
+    setMinimumSalary: changeSalary,
     saving,
     toast,
     dismissToast: useCallback(() => setToast(null), []),
+    fieldErrors,
+    fieldError: (path: string) => fieldErrors[path],
+    groupError: (prefix: string) => matchGroupError(fieldErrors, prefix),
     save,
   }
 }

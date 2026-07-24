@@ -93,6 +93,12 @@ export type Project = {
   deployed_url: string | null
 }
 
+export type CompletionIssue = {
+  step: 'profile' | 'preferences'
+  path: Array<string | number>
+  message: string
+}
+
 /** Mirrors backend OnboardingSnapshot — the one response shape for all onboarding calls. */
 export type OnboardingSnapshot = {
   profile: Profile
@@ -100,6 +106,7 @@ export type OnboardingSnapshot = {
   employment_history: Employment[]
   projects: Project[]
   onboarding_complete: boolean
+  completion_issues: CompletionIssue[]
 }
 
 // ── Write payloads (strict backend validation applies) ─────────────────

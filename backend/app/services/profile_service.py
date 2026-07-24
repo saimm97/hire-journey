@@ -18,6 +18,7 @@ from app.models.resume import Resume
 from app.models.technology import ProfileTechnology, Technology
 from app.schemas.extraction import EmploymentItem, ProjectItem, ResumeExtraction
 from app.schemas.profile import (
+    CompletionIssue,
     EmploymentEntry,
     EmploymentRead,
     PreferencesUpdate,
@@ -76,6 +77,21 @@ async def _load_profile(db: AsyncSession, user_id: int) -> Profile | None:
     ).scalar_one_or_none()
 
 
+async def get_match_preferences(db: AsyncSession, user_id: int) -> tuple[list[str], list[str]]:
+    """Return (desired_roles, technology_names) used to score jobs for this user.
+
+    Both drive keyword scoring: desired_roles are the primary "what job" signal,
+    technologies the "does my stack fit" bonus. Returns ([], []) when the user
+    has no profile yet — the caller then scores nothing, yielding an empty feed.
+    """
+    profile = await _load_profile(db, user_id)
+    if profile is None:
+        return [], []
+    roles = list(profile.desired_roles or [])
+    techs = [t.name for t in profile.technologies]
+    return roles, techs
+
+
 async def _profile_id(db: AsyncSession, user_id: int) -> int:
     profile_id = await db.scalar(select(Profile.id).where(Profile.user_id == user_id))
     if profile_id is None:
@@ -83,17 +99,68 @@ async def _profile_id(db: AsyncSession, user_id: int) -> int:
     return profile_id
 
 
+def onboarding_completion_issues(profile: Profile) -> list[CompletionIssue]:
+    """Return every unmet onboarding requirement in step order."""
+    issues: list[CompletionIssue] = []
+    requirements = (
+        (
+            profile.source_resume_id is not None,
+            "profile",
+            ["source_resume"],
+            "Upload a resume.",
+        ),
+        (
+            bool(_clean(profile.first_name)),
+            "profile",
+            ["first_name"],
+            "Enter your first name.",
+        ),
+        (
+            bool(_clean(profile.last_name)),
+            "profile",
+            ["last_name"],
+            "Enter your last name.",
+        ),
+        (
+            bool(_clean(profile.title)),
+            "profile",
+            ["title"],
+            "Enter your professional title.",
+        ),
+        (
+            bool(profile.desired_roles),
+            "preferences",
+            ["desired_roles"],
+            "Add at least one desired role.",
+        ),
+        (
+            bool(profile.desired_locations),
+            "preferences",
+            ["desired_locations"],
+            "Add at least one desired location.",
+        ),
+        (
+            bool(profile.work_modes_preferred),
+            "preferences",
+            ["work_modes_preferred"],
+            "Pick at least one work mode.",
+        ),
+        (
+            bool(_clean(profile.seniority_level)),
+            "preferences",
+            ["seniority_level"],
+            "Pick your seniority level.",
+        ),
+    )
+    for complete, step, path, message in requirements:
+        if not complete:
+            issues.append(CompletionIssue(step=step, path=path, message=message))
+    return issues
+
+
 def is_onboarding_complete(profile: Profile) -> bool:
     """The computed completion rule — intentionally never persisted."""
-    return bool(
-        profile.source_resume_id is not None
-        and _clean(profile.first_name)
-        and _clean(profile.last_name)
-        and _clean(profile.title)
-        and profile.desired_roles
-        and profile.work_modes_preferred
-        and _clean(profile.seniority_level)
-    )
+    return not onboarding_completion_issues(profile)
 
 
 async def _get_or_create_technology(db: AsyncSession, name: str) -> Technology:
@@ -312,9 +379,7 @@ async def _create_membership(
     await _set_membership_technologies(db, membership.id, parsed.technologies)
 
 
-async def replace_projects(
-    db: AsyncSession, profile_id: int, projects: list[ProjectItem]
-) -> None:
+async def replace_projects(db: AsyncSession, profile_id: int, projects: list[ProjectItem]) -> None:
     """Replace a profile's project memberships and remove unreferenced projects."""
     old_project_ids = list(
         (
@@ -380,9 +445,7 @@ def _resume_profile_values(extraction: ResumeExtraction) -> dict:
             if _clean(item.institution)
         ],
         "certifications": [
-            item.model_dump(mode="json")
-            for item in extraction.certifications
-            if _clean(item.name)
+            item.model_dump(mode="json") for item in extraction.certifications if _clean(item.name)
         ],
     }
 
@@ -450,9 +513,9 @@ async def save_projects(db: AsyncSession, profile_id: int, entries: list[Project
         project.id: (membership, project)
         for membership, project in await _load_memberships(db, profile_id)
     }
-    for entry in entries:
+    for row_index, entry in enumerate(entries):
         if entry.project_id is not None and entry.project_id not in memberships:
-            raise ProjectOwnershipError(messages.PROJECT_NOT_OWNED)
+            raise ProjectOwnershipError(messages.PROJECT_NOT_OWNED, row_index)
 
     handled: set[int] = set()
     for entry in entries:

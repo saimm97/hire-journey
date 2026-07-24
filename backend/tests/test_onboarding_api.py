@@ -4,6 +4,7 @@ import uuid
 
 from sqlalchemy import delete, func, select
 
+from app import messages
 from app.models import Company, EmploymentHistory, Profile, ProfileProject, Project, Resume, User
 from app.schemas.profile import ProjectEntry
 from app.services import profile_service
@@ -41,6 +42,14 @@ async def test_snapshot_shape(client, db, test_user):
     assert body["employment_history"] == []
     assert body["projects"] == []
     assert body["onboarding_complete"] is False
+    assert [issue["path"] for issue in body["completion_issues"]] == [
+        ["last_name"],
+        ["title"],
+        ["desired_roles"],
+        ["desired_locations"],
+        ["work_modes_preferred"],
+        ["seniority_level"],
+    ]
 
 
 # ── Details step ───────────────────────────────────────────────────────
@@ -62,11 +71,12 @@ async def test_details_roundtrip(client, db, test_user):
             {
                 "institution": "TU Berlin",
                 "degree": "BSc",
-                "start_date": "2016-10",
+                "start_date": "2016",
                 "end_date": "2019-09",
-            }
+            },
+            {"institution": "Self-directed study"},
         ],
-        "certifications": [{"name": "AWS SAA", "issued_at": "2023-03"}],
+        "certifications": [{"name": "AWS SAA", "issued_at": "2023"}],
         "employment_history": [
             {
                 "company_name": f"DetCo {marker}",
@@ -89,7 +99,10 @@ async def test_details_roundtrip(client, db, test_user):
         assert profile["title"] == "Backend Engineer"
         assert profile["social_links"] == {"github_url": "https://github.com/jane"}
         assert profile["education"][0]["institution"] == "TU Berlin"
+        assert profile["education"][0]["start_date"] == "2016"
+        assert profile["education"][1]["start_date"] is None
         assert profile["certifications"][0]["name"] == "AWS SAA"
+        assert profile["certifications"][0]["issued_at"] == "2023"
         assert sorted(profile["technologies"]) == ["fastapi", "python"]
         assert body["employment_history"][0]["company_name"] == f"DetCo {marker}"
         assert body["employment_history"][0]["start_date"] == "2021-05-01"
@@ -133,13 +146,119 @@ async def test_details_validation_errors(client, db, test_user):
         assert (await client.put("/api/v1/profile/details", json=payload)).status_code == 422
 
 
+async def test_details_validation_error_returns_actionable_field_path(client, db, test_user):
+    await _seed_profile(db, test_user.id)
+
+    response = await client.put(
+        "/api/v1/profile/details",
+        json={
+            "education": [
+                {
+                    "institution": "TU Berlin",
+                    "start_date": "May 2021",
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "error": {
+            "code": "validation_error",
+            "message": "Some details need fixing.",
+            "fields": [
+                {
+                    "path": ["education", 0, "start_date"],
+                    "message": "must be in YYYY or YYYY-MM format",
+                }
+            ],
+        }
+    }
+
+
+async def test_details_rejects_reversed_dates_on_the_end_fields(client, db, test_user):
+    await _seed_profile(db, test_user.id)
+
+    response = await client.put(
+        "/api/v1/profile/details",
+        json={
+            "education": [
+                {
+                    "institution": "TU Berlin",
+                    "start_date": "2026",
+                    "end_date": "2012",
+                }
+            ],
+            "certifications": [
+                {
+                    "name": "AWS",
+                    "issued_at": "2025-09",
+                    "expires_at": "2025-03",
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+    fields = {
+        tuple(field["path"]): field["message"] for field in response.json()["error"]["fields"]
+    }
+    assert fields == {
+        ("education", 0, "end_date"): "education end date cannot precede its start date",
+        (
+            "certifications",
+            0,
+            "expires_at",
+        ): "expiration date cannot precede its issue date",
+    }
+
+
+async def test_details_accepts_same_year_when_only_one_date_has_month_precision(
+    client, db, test_user
+):
+    await _seed_profile(db, test_user.id)
+
+    response = await client.put(
+        "/api/v1/profile/details",
+        json={
+            "education": [
+                {
+                    "institution": "TU Berlin",
+                    "start_date": "2021-09",
+                    "end_date": "2021",
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+
+
 async def test_details_rejects_foreign_project_id(client, db, test_user):
     await _seed_profile(db, test_user.id)
     response = await client.put(
         "/api/v1/profile/details",
-        json={"projects": [{"project_id": 99999999, "name": "X"}]},
+        json={
+            "projects": [
+                {"name": "New project"},
+                {"project_id": 99999999, "name": "Stale project"},
+            ]
+        },
     )
-    assert response.status_code == 422
+    # A stale/foreign project_id is a conflict to resolve by reloading, not bad input.
+    assert response.status_code == 409
+    assert response.json() == {
+        "error": {
+            "code": "projects_stale",
+            "message": messages.PROJECTS_STALE,
+            "fields": [
+                {
+                    "path": ["projects", 1],
+                    "message": messages.PROJECTS_STALE,
+                }
+            ],
+        }
+    }
 
 
 async def test_details_requires_profile(client):
@@ -233,33 +352,84 @@ async def test_preferences_happy_path_completes_onboarding(client, db, test_user
     assert body["profile"]["work_modes_preferred"] == ["remote", "hybrid"]  # deduped
     assert body["profile"]["seniority_level"] == "senior"
     assert body["onboarding_complete"] is True
+    assert body["completion_issues"] == []
 
 
 async def test_preferences_validation_errors(client, db, test_user):
     await _seed_profile(db, test_user.id)
     valid = {
         "desired_roles": ["backend"],
+        "desired_locations": ["Berlin"],
         "work_modes_preferred": ["remote"],
         "seniority_level": "senior",
     }
     bad_payloads = [
         {**valid, "desired_roles": []},
         {**valid, "desired_roles": ["   "]},  # cleans to empty
+        {**valid, "desired_locations": []},
+        {**valid, "desired_locations": ["   "]},  # cleans to empty
         {**valid, "work_modes_preferred": []},
         {**valid, "work_modes_preferred": ["office"]},  # not a valid mode
         {**valid, "seniority_level": "boss"},  # not a valid level
         {**valid, "minimum_salary": -1},
     ]
     for payload in bad_payloads:
-        assert (
-            await client.put("/api/v1/profile/preferences", json=payload)
-        ).status_code == 422
+        assert (await client.put("/api/v1/profile/preferences", json=payload)).status_code == 422
 
 
 async def test_preferences_requires_profile(client):
     payload = {
         "desired_roles": ["backend"],
+        "desired_locations": ["Berlin"],
         "work_modes_preferred": ["remote"],
         "seniority_level": "senior",
     }
     assert (await client.put("/api/v1/profile/preferences", json=payload)).status_code == 404
+
+
+async def test_preferences_empty_lists_are_field_addressable(client, db, test_user):
+    # The required-list rejections must carry a concrete path (field_validator,
+    # not model_validator) so the UI can highlight the exact control.
+    await _seed_profile(db, test_user.id)
+    response = await client.put(
+        "/api/v1/profile/preferences",
+        json={
+            "desired_roles": [],
+            "desired_locations": [],
+            "work_modes_preferred": [],
+            "seniority_level": "senior",
+        },
+    )
+    assert response.status_code == 422
+    paths = {tuple(field["path"]) for field in response.json()["error"]["fields"]}
+    assert ("desired_roles",) in paths
+    assert ("desired_locations",) in paths
+    assert ("work_modes_preferred",) in paths
+
+
+# ── Error envelope ─────────────────────────────────────────────────────
+
+
+async def test_unhandled_error_returns_cors_safe_envelope(client, db, test_user, monkeypatch):
+    """An uncaught exception returns the envelope with a request_id AND the CORS
+    header (so the browser can read it), and never leaks internals."""
+    from app.config import settings
+
+    await _seed_profile(db, test_user.id)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("connection to postgres://secret failed")
+
+    monkeypatch.setattr(profile_service, "get_snapshot", boom)
+    origin = settings.cors_origins_list[0]
+    response = await client.get("/api/v1/profile", headers={"Origin": origin})
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["error"]["code"] == "internal_error"
+    assert body["error"]["request_id"]
+    # CORS header present -> the browser won't drop this as a network failure.
+    assert response.headers.get("access-control-allow-origin") == origin
+    # No provider/exception internals in the response body.
+    assert "postgres://secret" not in response.text
+    assert "RuntimeError" not in response.text

@@ -62,28 +62,36 @@ RESUME_SKILLS = [
 
 async def seed_test_data(db) -> None:
     """Insert a test user and resume if they don't already exist."""
-    user_stmt = pg_insert(User).values(
-        user_id=TEST_USER_ID,
-        username="test_pipeline_user",
-        email="test@pipeline.local",
-        password_hash="not-a-real-hash",
-    ).on_conflict_do_nothing(index_elements=["user_id"])
+    user_stmt = (
+        pg_insert(User)
+        .values(
+            user_id=TEST_USER_ID,
+            username="test_pipeline_user",
+            email="test@pipeline.local",
+            password_hash="not-a-real-hash",
+        )
+        .on_conflict_do_nothing(index_elements=["user_id"])
+    )
     await db.execute(user_stmt)
 
-    resume_stmt = pg_insert(Resume).values(
-        resume_id=TEST_RESUME_ID,
-        user_id=TEST_USER_ID,
-        file_name="aneeb_resume.pdf",
-        is_active=True,
-        parsed_content={"skills": RESUME_SKILLS, "experience": [], "education": []},
-        raw_content=(
-            "Python FastAPI Django Node.js React.js Next.js TypeScript JavaScript "
-            "PostgreSQL MongoDB Redis WebSockets REST APIs Machine Learning RAG LSTM Kafka "
-            "Full Stack Backend Software Engineer"
-        ),
-    ).on_conflict_do_update(
-        index_elements=["resume_id"],
-        set_={"parsed_content": {"skills": RESUME_SKILLS, "experience": [], "education": []}},
+    resume_stmt = (
+        pg_insert(Resume)
+        .values(
+            resume_id=TEST_RESUME_ID,
+            user_id=TEST_USER_ID,
+            file_name="aneeb_resume.pdf",
+            is_active=True,
+            parsed_content={"skills": RESUME_SKILLS, "experience": [], "education": []},
+            raw_content=(
+                "Python FastAPI Django Node.js React.js Next.js TypeScript JavaScript "
+                "PostgreSQL MongoDB Redis WebSockets REST APIs Machine Learning RAG LSTM Kafka "
+                "Full Stack Backend Software Engineer"
+            ),
+        )
+        .on_conflict_do_update(
+            index_elements=["resume_id"],
+            set_={"parsed_content": {"skills": RESUME_SKILLS, "experience": [], "education": []}},
+        )
     )
     await db.execute(resume_stmt)
 

@@ -11,8 +11,6 @@ from app.exceptions import (
     DocumentParseError,
     ExtractionError,
     LLMNotConfiguredError,
-    ProfileNotFoundError,
-    ProjectOwnershipError,
 )
 from app.models.profile import Profile
 from app.models.user import User
@@ -39,12 +37,14 @@ async def _snapshot(db: AsyncSession, user: User) -> OnboardingSnapshot:
     profile_read = ProfileRead.model_validate(profile).model_copy(
         update={"account_email": user.email}
     )
+    completion_issues = profile_service.onboarding_completion_issues(profile)
     return OnboardingSnapshot(
         profile=profile_read,
         source_resume=source_resume,
         employment_history=employments,
         projects=projects,
-        onboarding_complete=profile_service.is_onboarding_complete(profile),
+        onboarding_complete=not completion_issues,
+        completion_issues=completion_issues,
     )
 
 
@@ -128,14 +128,7 @@ async def save_details(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> OnboardingSnapshot:
-    try:
-        await profile_service.save_details(db, current_user.id, payload)
-    except ProfileNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except ProjectOwnershipError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-        ) from exc
+    await profile_service.save_details(db, current_user.id, payload)
     return await _snapshot(db, current_user)
 
 
@@ -145,8 +138,5 @@ async def save_preferences(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> OnboardingSnapshot:
-    try:
-        await profile_service.save_preferences(db, current_user.id, payload)
-    except ProfileNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    await profile_service.save_preferences(db, current_user.id, payload)
     return await _snapshot(db, current_user)

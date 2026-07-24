@@ -18,9 +18,7 @@ class Job(Base):
     __table_args__ = (UniqueConstraint("url", name="uq_jobs_url"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    company_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("companies.id"), nullable=False
-    )
+    company_id: Mapped[int] = mapped_column(Integer, ForeignKey("companies.id"), nullable=False)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
     parsed_desc: Mapped[dict] = mapped_column(  # {required_skills: [], nice_to_have: []}

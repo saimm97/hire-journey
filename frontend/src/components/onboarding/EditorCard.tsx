@@ -1,12 +1,36 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { useId, type ReactNode } from "react"
 import { Plus, Trash2 } from "lucide-react"
 
+import { cn } from "@/lib/utils"
+
 /** Card frame for one repeatable-section entry, with its remove control. */
-export function EditorCard({ onRemove, children }: { onRemove: () => void; children: ReactNode }) {
+export function EditorCard({
+  onRemove,
+  error,
+  fieldPath,
+  children,
+}: {
+  onRemove: () => void
+  error?: string
+  fieldPath?: string
+  children: ReactNode
+}) {
+  const generatedId = useId()
+  const errorId = error ? `${generatedId}-error` : undefined
+
   return (
-    <div className="relative space-y-3 rounded-xl border border-brand-border bg-white p-4">
+    <div
+      data-field-path={fieldPath}
+      tabIndex={fieldPath ? -1 : undefined}
+      aria-invalid={error ? true : undefined}
+      aria-describedby={errorId}
+      className={cn(
+        "relative space-y-3 rounded-xl border border-brand-border bg-white p-4",
+        error && "border-red-500",
+      )}
+    >
       <button
         type="button"
         onClick={onRemove}
@@ -15,6 +39,11 @@ export function EditorCard({ onRemove, children }: { onRemove: () => void; child
       >
         <Trash2 className="size-4" />
       </button>
+      {error && (
+        <p id={errorId} className="pr-8 text-xs text-red-600">
+          {error}
+        </p>
+      )}
       {children}
     </div>
   )

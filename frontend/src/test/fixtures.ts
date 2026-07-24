@@ -1,6 +1,6 @@
 /** Shared snapshot builders for onboarding tests. */
 
-import type { OnboardingSnapshot, Profile } from '@/lib/api/types'
+import type { CompletionIssue, OnboardingSnapshot, Profile, ResumeMeta } from '@/lib/api/types'
 
 export function makeProfile(overrides: Partial<Profile> = {}): Profile {
   return {
@@ -30,12 +30,77 @@ export function makeProfile(overrides: Partial<Profile> = {}): Profile {
 }
 
 export function makeSnapshot(overrides: Partial<OnboardingSnapshot> = {}): OnboardingSnapshot {
+  const profile = overrides.profile ?? makeProfile()
+  const sourceResume: ResumeMeta | null =
+    overrides.source_resume === undefined
+      ? { id: 1, file_name: 'cv.pdf', created_at: '2026-01-01T00:00:00Z', summary: null }
+      : overrides.source_resume
+  const completionIssues: CompletionIssue[] = overrides.onboarding_complete
+    ? []
+    : [
+        ...(!sourceResume
+          ? [{ step: 'profile' as const, path: ['source_resume'], message: 'Upload a resume.' }]
+          : []),
+        ...(!profile.first_name?.trim()
+          ? [{ step: 'profile' as const, path: ['first_name'], message: 'Enter your first name.' }]
+          : []),
+        ...(!profile.last_name?.trim()
+          ? [{ step: 'profile' as const, path: ['last_name'], message: 'Enter your last name.' }]
+          : []),
+        ...(!profile.title?.trim()
+          ? [
+              {
+                step: 'profile' as const,
+                path: ['title'],
+                message: 'Enter your professional title.',
+              },
+            ]
+          : []),
+        ...(!profile.desired_roles.length
+          ? [
+              {
+                step: 'preferences' as const,
+                path: ['desired_roles'],
+                message: 'Add at least one desired role.',
+              },
+            ]
+          : []),
+        ...(!profile.desired_locations.length
+          ? [
+              {
+                step: 'preferences' as const,
+                path: ['desired_locations'],
+                message: 'Add at least one desired location.',
+              },
+            ]
+          : []),
+        ...(!profile.work_modes_preferred.length
+          ? [
+              {
+                step: 'preferences' as const,
+                path: ['work_modes_preferred'],
+                message: 'Pick at least one work mode.',
+              },
+            ]
+          : []),
+        ...(!profile.seniority_level?.trim()
+          ? [
+              {
+                step: 'preferences' as const,
+                path: ['seniority_level'],
+                message: 'Pick your seniority level.',
+              },
+            ]
+          : []),
+      ]
+
   return {
-    profile: makeProfile(),
-    source_resume: { id: 1, file_name: 'cv.pdf', created_at: '2026-01-01T00:00:00Z', summary: null },
+    profile,
+    source_resume: sourceResume,
     employment_history: [],
     projects: [],
     onboarding_complete: false,
+    completion_issues: completionIssues,
     ...overrides,
   }
 }

@@ -47,6 +47,14 @@ describe('usePreferences', () => {
     await waitFor(() => expect(result.current.redirectTo).toBe('/onboarding/profile'))
   })
 
+  it('redirects to the profile step when core profile details are incomplete', async () => {
+    getOnboardingMock.mockResolvedValue(
+      makeSnapshot({ profile: makeProfile({ title: null }) }),
+    )
+    const { result } = renderHook(() => usePreferences())
+    await waitFor(() => expect(result.current.redirectTo).toBe('/onboarding/profile'))
+  })
+
   it('redirects completed users to the dashboard', async () => {
     getOnboardingMock.mockResolvedValue(makeSnapshot({ onboarding_complete: true }))
     const { result } = renderHook(() => usePreferences())
@@ -77,6 +85,9 @@ describe('usePreferences', () => {
     })
     expect(saved).toBe(false)
     expect(result.current.toast?.variant).toBe('error')
+    expect(result.current.fieldErrors.desired_locations).toBe(
+      'Add at least one desired location.',
+    )
     expect(savePreferencesMock).not.toHaveBeenCalled()
   })
 
@@ -108,5 +119,29 @@ describe('usePreferences', () => {
       work_modes_preferred: ['remote'],
       seniority_level: 'senior',
     })
+  })
+
+  it('names profile requirements that still prevent completion', async () => {
+    getOnboardingMock.mockResolvedValue(makeSnapshot())
+    savePreferencesMock.mockResolvedValue(
+      makeSnapshot({ profile: makeProfile({ first_name: null }) }),
+    )
+    const { result } = renderHook(() => usePreferences())
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+
+    act(() => {
+      result.current.addRole('Backend Engineer')
+      result.current.addLocation('Berlin')
+      result.current.toggleWorkMode('remote')
+      result.current.setSeniority('senior')
+    })
+
+    let saved = true
+    await act(async () => {
+      saved = await result.current.save()
+    })
+
+    expect(saved).toBe(false)
+    expect(result.current.toast?.message).toContain('Enter your first name.')
   })
 })

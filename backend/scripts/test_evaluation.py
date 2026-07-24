@@ -25,10 +25,25 @@ from app.services.evaluation_service import run_evaluation
 TEST_USERNAME = "test_pipeline_user"
 
 RESUME_SKILLS = [
-    "Python", "FastAPI", "Django", "Node.js", "React.js", "Next.js",
-    "TypeScript", "JavaScript", "PostgreSQL", "MongoDB", "Redis",
-    "WebSockets", "REST APIs", "Machine Learning", "RAG", "Kafka", "SQL",
-    "Git", "Linux",
+    "Python",
+    "FastAPI",
+    "Django",
+    "Node.js",
+    "React.js",
+    "Next.js",
+    "TypeScript",
+    "JavaScript",
+    "PostgreSQL",
+    "MongoDB",
+    "Redis",
+    "WebSockets",
+    "REST APIs",
+    "Machine Learning",
+    "RAG",
+    "Kafka",
+    "SQL",
+    "Git",
+    "Linux",
 ]
 
 RESUME_RAW = (

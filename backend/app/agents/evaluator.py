@@ -52,19 +52,23 @@ Be honest. An honest weak evaluation is more valuable than a falsely positive on
 
 class EvaluationResult(BaseModel):
     match_score: int = Field(
-        ge=0, le=100,
+        ge=0,
+        le=100,
         description="Overall fit score 0-100 per the scoring guide",
     )
     strengths: list[str] = Field(
-        min_length=1, max_length=8,
+        min_length=1,
+        max_length=8,
         description="3-5 specific strengths the candidate brings to this role",
     )
     weaknesses: list[str] = Field(
-        min_length=1, max_length=6,
+        min_length=1,
+        max_length=6,
         description="2-4 genuine gaps or concerns a hiring manager would flag",
     )
     recommendations: list[str] = Field(
-        min_length=1, max_length=8,
+        min_length=1,
+        max_length=8,
         description="3-5 specific, actionable steps to strengthen this application",
     )
 
@@ -93,19 +97,34 @@ def _build_providers() -> list:
     providers = []
     if settings.groq_api_key:
         from langchain_groq import ChatGroq
-        providers.append(ChatGroq(
-            model=settings.groq_model, temperature=0.3, api_key=settings.groq_api_key,
-        ))
+
+        providers.append(
+            ChatGroq(
+                model=settings.groq_model,
+                temperature=0.3,
+                api_key=settings.groq_api_key,
+            )
+        )
     if settings.gemini_api_key:
         from langchain_google_genai import ChatGoogleGenerativeAI
-        providers.append(ChatGoogleGenerativeAI(
-            model=settings.gemini_model, temperature=0.3, google_api_key=settings.gemini_api_key,
-        ))
+
+        providers.append(
+            ChatGoogleGenerativeAI(
+                model=settings.gemini_model,
+                temperature=0.3,
+                google_api_key=settings.gemini_api_key,
+            )
+        )
     if settings.openai_api_key:
         from langchain_openai import ChatOpenAI
-        providers.append(ChatOpenAI(
-            model=settings.openai_model, temperature=0.3, api_key=settings.openai_api_key,
-        ))
+
+        providers.append(
+            ChatOpenAI(
+                model=settings.openai_model,
+                temperature=0.3,
+                api_key=settings.openai_api_key,
+            )
+        )
     return providers
 
 
@@ -128,9 +147,20 @@ async def evaluate_job(
             "or OPENAI_API_KEY in .env"
         )
 
-    messages = [("system", _SYSTEM_PROMPT), ("human", _build_user_message(
-        resume_text, skills, job_title, company, location, description,
-    ))]
+    messages = [
+        ("system", _SYSTEM_PROMPT),
+        (
+            "human",
+            _build_user_message(
+                resume_text,
+                skills,
+                job_title,
+                company,
+                location,
+                description,
+            ),
+        ),
+    ]
 
     last_err: Exception | None = None
     for llm in providers:

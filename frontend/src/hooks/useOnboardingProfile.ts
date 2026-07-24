@@ -1,6 +1,12 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react"
 
 import { ApiError } from "@/lib/api/client"
 import { getOnboarding, saveDetails, uploadCv as uploadCvRequest } from "@/lib/api/profile"
@@ -8,7 +14,7 @@ import type { OnboardingSnapshot, ProfileDetailsPayload } from "@/lib/api/types"
 import { COMPLETED_DESTINATION } from "@/lib/onboarding/routing"
 import type { ToastData } from "@/components/onboarding/Toast"
 
-export type OnboardingStatus = "loading" | "empty" | "parsing" | "ready"
+export type OnboardingStatus = "loading" | "empty" | "parsing" | "ready" | "load_error"
 
 export interface Identity {
   first_name: string
@@ -62,7 +68,12 @@ export interface ListController<T> {
   add: () => void
   update: (index: number, patch: Partial<T>) => void
   remove: (index: number) => void
+  fieldPath: (index: number, field: keyof T) => string
+  fieldError: (index: number, field: keyof T) => string | undefined
+  rowError: (index: number) => string | undefined
 }
+
+export type FieldErrors = Record<string, string>
 
 const EMPTY_IDENTITY: Identity = {
   first_name: "",
@@ -76,17 +87,94 @@ const EMPTY_LINKS: SocialLinksState = { github_url: "", linkedin_url: "", portfo
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 const ALLOWED_EXTENSIONS = [".pdf", ".docx"]
+const YEAR_OR_MONTH_RE = /^\d{4}(?:-(?:0[1-9]|1[0-2]))?$/
+const MONTH_RE = /^\d{4}-(?:0[1-9]|1[0-2])$/
 
 const emptyToNull = (value: string): string | null => value.trim() || null
 
 const messageOf = (error: unknown): string =>
   error instanceof ApiError ? error.message : "Something went wrong. Try again."
 
+/** An error toast that also surfaces the support reference on a 500. */
+const errorToast = (error: unknown): ToastData => ({
+  variant: "error",
+  message: messageOf(error),
+  requestId: error instanceof ApiError ? error.requestId : undefined,
+})
+
 /** True when the user typed anything into the row (empty rows are dropped silently). */
 const hasContent = (row: object): boolean =>
   Object.values(row).some((value: unknown) =>
     typeof value === "string" ? value.trim() : Array.isArray(value) ? value.length : false,
   )
+
+const pathKey = (path: Array<string | number>): string => path.join(".")
+
+const hasValidYear = (value: string): boolean => {
+  const year = Number(value.slice(0, 4))
+  return year >= 1900 && year <= 2100
+}
+
+const validYearOrMonth = (value: string): boolean =>
+  YEAR_OR_MONTH_RE.test(value) && hasValidYear(value)
+
+const validMonth = (value: string): boolean => MONTH_RE.test(value) && hasValidYear(value)
+
+const unambiguouslyPrecedes = (startValue: string, endValue: string): boolean => {
+  const start = startValue.trim()
+  const end = endValue.trim()
+  if (!validYearOrMonth(start) || !validYearOrMonth(end)) return false
+  const startYear = Number(start.slice(0, 4))
+  const endYear = Number(end.slice(0, 4))
+  if (endYear !== startYear) return endYear < startYear
+  return start.length === 7 && end.length === 7 && end < start
+}
+
+function focusFirstError(errors: FieldErrors): void {
+  if (typeof document === "undefined") return
+  const firstPath = Object.keys(errors)[0]
+  if (!firstPath) return
+  const schedule =
+    window.requestAnimationFrame ??
+    ((callback: FrameRequestCallback) => window.setTimeout(callback, 0))
+  schedule(() => {
+    const field = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-field-path]"),
+    ).find((element) => element.dataset.fieldPath === firstPath)
+    field?.focus()
+  })
+}
+
+function apiFieldErrors(
+  error: ApiError,
+  projectPayloadIndexToUiIndex: number[] = [],
+): FieldErrors {
+  const errors: FieldErrors = {}
+  for (const field of error.fields) {
+    if (!field.path.length) continue
+    const path = [...field.path]
+    if (path[0] === "projects" && typeof path[1] === "number") {
+      const uiIndex = projectPayloadIndexToUiIndex[path[1]]
+      if (uiIndex !== undefined) path[1] = uiIndex
+    }
+    const key = pathKey(path)
+    errors[key] ??= field.message
+  }
+  return errors
+}
+
+const editableProjects = (snapshot: OnboardingSnapshot): EditableProject[] =>
+  snapshot.projects.map((project) => ({
+    project_id: project.project_id,
+    name: project.name,
+    summary: project.summary ?? "",
+    github_url: project.github_url ?? "",
+    deployed_url: project.deployed_url ?? "",
+    technologies: [...project.tech_stack],
+  }))
+
+const isProjectErrorPath = (path: string): boolean =>
+  path === "projects" || path.startsWith("projects.")
 
 function validateFile(file: File): string | null {
   const name = file.name.toLowerCase()
@@ -97,23 +185,53 @@ function validateFile(file: File): string | null {
 }
 
 /** Local list state with the add/update/remove surface every repeatable editor needs. */
-function useListController<T>(makeEmpty: () => T): ListController<T> & {
+function useListController<T>(
+  makeEmpty: () => T,
+  pathPrefix: string,
+  fieldErrors: FieldErrors,
+  setFieldErrors: Dispatch<SetStateAction<FieldErrors>>,
+): ListController<T> & {
   setItems: (items: T[]) => void
 } {
   const [items, setItems] = useState<T[]>([])
+  const fieldPath = useCallback(
+    (index: number, field: keyof T) => `${pathPrefix}.${index}.${String(field)}`,
+    [pathPrefix],
+  )
   return {
     items,
     setItems,
     add: useCallback(() => setItems((prev) => [...prev, makeEmpty()]), [makeEmpty]),
     update: useCallback(
-      (index: number, patch: Partial<T>) =>
-        setItems((prev) => prev.map((item, i) => (i === index ? { ...item, ...patch } : item))),
-      [],
+      (index: number, patch: Partial<T>) => {
+        setItems((prev) => prev.map((item, i) => (i === index ? { ...item, ...patch } : item)))
+        setFieldErrors((prev) => {
+          const next = { ...prev }
+          delete next[`${pathPrefix}.${index}`]
+          for (const field of Object.keys(patch)) {
+            delete next[`${pathPrefix}.${index}.${field}`]
+          }
+          return next
+        })
+      },
+      [pathPrefix, setFieldErrors],
     ),
     remove: useCallback(
-      (index: number) => setItems((prev) => prev.filter((_, i) => i !== index)),
-      [],
+      (index: number) => {
+        setItems((prev) => prev.filter((_, i) => i !== index))
+        // Removing a row shifts every following index, so discard the section's
+        // stale server paths rather than highlighting the wrong entry.
+        setFieldErrors((prev) =>
+          Object.fromEntries(
+            Object.entries(prev).filter(([path]) => !path.startsWith(`${pathPrefix}.`)),
+          ),
+        )
+      },
+      [pathPrefix, setFieldErrors],
     ),
+    fieldPath,
+    fieldError: (index, field) => fieldErrors[fieldPath(index, field)],
+    rowError: (index) => fieldErrors[`${pathPrefix}.${index}`],
   }
 }
 
@@ -143,35 +261,68 @@ export function useOnboardingProfile({
   const [sourceResumeId, setSourceResumeId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<ToastData | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [projectConflict, setProjectConflict] = useState<string | null>(null)
+  const [reloadingProjects, setReloadingProjects] = useState(false)
 
-  const education = useListController<EditableEducation>(() => ({
-    institution: "",
-    degree: "",
-    field: "",
-    start_date: "",
-    end_date: "",
-  }))
-  const certifications = useListController<EditableCertification>(() => ({
-    name: "",
-    issuer: "",
-    issued_at: "",
-    expires_at: "",
-  }))
-  const employment = useListController<EditableEmployment>(() => ({
-    company_name: "",
-    title: "",
-    start_date: "",
-    end_date: "",
-    description: "",
-  }))
-  const projects = useListController<EditableProject>(() => ({
-    project_id: null,
-    name: "",
-    summary: "",
-    github_url: "",
-    deployed_url: "",
-    technologies: [],
-  }))
+  const clearFieldError = useCallback((path: string) => {
+    setFieldErrors((prev) => {
+      if (!(path in prev)) return prev
+      const next = { ...prev }
+      delete next[path]
+      return next
+    })
+  }, [])
+
+  const education = useListController<EditableEducation>(
+    () => ({
+      institution: "",
+      degree: "",
+      field: "",
+      start_date: "",
+      end_date: "",
+    }),
+    "education",
+    fieldErrors,
+    setFieldErrors,
+  )
+  const certifications = useListController<EditableCertification>(
+    () => ({
+      name: "",
+      issuer: "",
+      issued_at: "",
+      expires_at: "",
+    }),
+    "certifications",
+    fieldErrors,
+    setFieldErrors,
+  )
+  const employment = useListController<EditableEmployment>(
+    () => ({
+      company_name: "",
+      title: "",
+      start_date: "",
+      end_date: "",
+      description: "",
+    }),
+    "employment_history",
+    fieldErrors,
+    setFieldErrors,
+  )
+  const projects = useListController<EditableProject>(
+    () => ({
+      project_id: null,
+      name: "",
+      summary: "",
+      github_url: "",
+      deployed_url: "",
+      technologies: [],
+    }),
+    "projects",
+    fieldErrors,
+    setFieldErrors,
+  )
 
   const hydrate = useCallback(
     (snapshot: OnboardingSnapshot) => {
@@ -219,16 +370,9 @@ export function useOnboardingProfile({
           description: item.description ?? "",
         })),
       )
-      projects.setItems(
-        snapshot.projects.map((project) => ({
-          project_id: project.project_id,
-          name: project.name,
-          summary: project.summary ?? "",
-          github_url: project.github_url ?? "",
-          deployed_url: project.deployed_url ?? "",
-          technologies: [...project.tech_stack],
-        })),
-      )
+      projects.setItems(editableProjects(snapshot))
+      setFieldErrors({})
+      setProjectConflict(null)
       setStatus("ready")
     },
     // setItems functions are stable; listing the controllers would loop.
@@ -236,25 +380,70 @@ export function useOnboardingProfile({
     [],
   )
 
+  // Bumping this re-runs the load effect; retry() (an event handler) triggers it.
+  const [reloadNonce, setReloadNonce] = useState(0)
+
   useEffect(() => {
     let active = true
-    getOnboarding()
-      .then((snapshot) => {
+    void (async () => {
+      try {
+        const snapshot = await getOnboarding()
         if (!active) return
         if (!snapshot || !snapshot.source_resume) setStatus("empty")
-        else if (snapshot.onboarding_complete && guardCompleted)
-          setRedirectTo(COMPLETED_DESTINATION)
+        else if (snapshot.onboarding_complete && guardCompleted) setRedirectTo(COMPLETED_DESTINATION)
         else hydrate(snapshot)
-      })
-      .catch((error) => {
+      } catch (error) {
         if (!active) return
-        setStatus("empty")
-        setToast({ variant: "error", message: messageOf(error) })
-      })
+        // Never fall back to the dropzone/empty form: uploading without the existing
+        // resume id would fork a second resume, and saving would blank stored data.
+        setLoadError(messageOf(error))
+        setStatus("load_error")
+      }
+    })()
     return () => {
       active = false
     }
-  }, [hydrate, guardCompleted])
+  }, [hydrate, guardCompleted, reloadNonce])
+
+  const retry = useCallback(() => {
+    setStatus("loading")
+    setLoadError(null)
+    setReloadNonce((n) => n + 1)
+  }, [])
+
+  const replaceProjects = projects.setItems
+  const reloadProjects = useCallback(async (): Promise<boolean> => {
+    setReloadingProjects(true)
+    try {
+      const snapshot = await getOnboarding()
+      if (!snapshot) {
+        setToast({
+          variant: "error",
+          message: "Your latest projects could not be loaded. Please try again.",
+        })
+        return false
+      }
+
+      replaceProjects(editableProjects(snapshot))
+      setFieldErrors((prev) =>
+        Object.fromEntries(
+          Object.entries(prev).filter(([path]) => !isProjectErrorPath(path)),
+        ),
+      )
+      setProjectConflict(null)
+      setToast({
+        variant: "success",
+        message: "Latest projects loaded. Review them, then save again.",
+      })
+      return true
+    } catch (error) {
+      // Keep both the edited projects and the recovery action available.
+      setToast(errorToast(error))
+      return false
+    } finally {
+      setReloadingProjects(false)
+    }
+  }, [replaceProjects])
 
   const uploadCv = useCallback(
     async (file: File) => {
@@ -270,7 +459,7 @@ export function useOnboardingProfile({
         hydrate(await uploadCvRequest(file, sourceResumeId))
       } catch (error) {
         setStatus(previous === "ready" ? "ready" : "empty")
-        setToast({ variant: "error", message: messageOf(error) })
+        setToast(errorToast(error))
       }
     },
     [status, sourceResumeId, hydrate],
@@ -281,11 +470,18 @@ export function useOnboardingProfile({
 
   const setIdentityField = useCallback((key: keyof Identity, value: string) => {
     setIdentity((prev) => ({ ...prev, [key]: value }))
-  }, [])
+    clearFieldError(key)
+  }, [clearFieldError])
 
   const setSocialLink = useCallback((key: keyof SocialLinksState, value: string) => {
     setSocialLinks((prev) => ({ ...prev, [key]: value }))
-  }, [])
+    clearFieldError(`social_links.${key}`)
+  }, [clearFieldError])
+
+  const setSummaryField = useCallback((value: string) => {
+    setSummary(value)
+    clearFieldError("summary")
+  }, [clearFieldError])
 
   const addTechnology = useCallback((value: string) => {
     const technology = value.trim()
@@ -293,36 +489,96 @@ export function useOnboardingProfile({
     setTechnologies((prev) =>
       prev.some((t) => t.toLowerCase() === technology.toLowerCase()) ? prev : [...prev, technology],
     )
-  }, [])
+    clearFieldError("technologies")
+  }, [clearFieldError])
 
   const removeTechnology = useCallback((value: string) => {
     setTechnologies((prev) => prev.filter((t) => t !== value))
-  }, [])
+    clearFieldError("technologies")
+  }, [clearFieldError])
 
-  /** Mirror of the backend's strict rules; returns an error message or null. */
-  const validate = useCallback((): string | null => {
-    for (const row of education.items.filter(hasContent))
-      if (!row.institution.trim()) return "Each education entry needs an institution."
-    for (const row of certifications.items.filter(hasContent))
-      if (!row.name.trim()) return "Each certification needs a name."
-    for (const row of employment.items.filter(hasContent)) {
-      if (!row.company_name.trim() || !row.title.trim())
-        return "Each employment entry needs a company and a title."
-      if (row.start_date && row.end_date && row.end_date < row.start_date)
-        return "An employment end date cannot be before its start date."
-    }
-    for (const row of projects.items.filter(hasContent))
-      if (!row.name.trim()) return "Each project needs a name."
-    return null
-  }, [education.items, certifications.items, employment.items, projects.items])
+  /** Mirror of the backend's strict rules for immediate, field-level feedback. */
+  const validate = useCallback((): FieldErrors => {
+    const errors: FieldErrors = {}
+    if (!identity.first_name.trim()) errors.first_name = "Enter your first name."
+    if (!identity.last_name.trim()) errors.last_name = "Enter your last name."
+    if (!identity.title.trim()) errors.title = "Enter your professional title."
+
+    education.items.forEach((row, index) => {
+      if (!hasContent(row)) return
+      if (!row.institution.trim())
+        errors[`education.${index}.institution`] = "Enter the institution."
+      for (const field of ["start_date", "end_date"] as const) {
+        const value = row[field].trim()
+        if (value && !validYearOrMonth(value))
+          errors[`education.${index}.${field}`] =
+            "Use YYYY or YYYY-MM, with a year from 1900 to 2100."
+      }
+      if (unambiguouslyPrecedes(row.start_date, row.end_date))
+        errors[`education.${index}.end_date`] =
+          "The education end date cannot be before its start date."
+    })
+
+    certifications.items.forEach((row, index) => {
+      if (!hasContent(row)) return
+      if (!row.name.trim()) errors[`certifications.${index}.name`] = "Enter the certification name."
+      for (const field of ["issued_at", "expires_at"] as const) {
+        const value = row[field].trim()
+        if (value && !validYearOrMonth(value))
+          errors[`certifications.${index}.${field}`] =
+            "Use YYYY or YYYY-MM, with a year from 1900 to 2100."
+      }
+      if (unambiguouslyPrecedes(row.issued_at, row.expires_at))
+        errors[`certifications.${index}.expires_at`] =
+          "The expiration date cannot be before its issue date."
+    })
+
+    employment.items.forEach((row, index) => {
+      if (!hasContent(row)) return
+      if (!row.company_name.trim())
+        errors[`employment_history.${index}.company_name`] = "Enter the company."
+      if (!row.title.trim()) errors[`employment_history.${index}.title`] = "Enter the job title."
+      for (const field of ["start_date", "end_date"] as const) {
+        const value = row[field].trim()
+        if (value && !validMonth(value))
+          errors[`employment_history.${index}.${field}`] =
+            "Use YYYY-MM, with a year from 1900 to 2100."
+      }
+      if (
+        validMonth(row.start_date) &&
+        validMonth(row.end_date) &&
+        row.end_date < row.start_date
+      )
+        errors[`employment_history.${index}.end_date`] =
+          "The end month cannot be before the start month."
+    })
+
+    projects.items.forEach((row, index) => {
+      if (hasContent(row) && !row.name.trim())
+        errors[`projects.${index}.name`] = "Enter the project name."
+    })
+    return errors
+  }, [identity, education.items, certifications.items, employment.items, projects.items])
 
   const saveAndContinue = useCallback(async (): Promise<boolean> => {
     const invalid = validate()
-    if (invalid) {
-      setToast({ variant: "error", message: invalid })
+    if (Object.keys(invalid).length) {
+      setFieldErrors(invalid)
+      setToast({
+        variant: "error",
+        message: `Fix the ${Object.keys(invalid).length} highlighted ${
+          Object.keys(invalid).length === 1 ? "field" : "fields"
+        }.`,
+      })
+      focusFirstError(invalid)
       return false
     }
+    setFieldErrors({})
     setSaving(true)
+    const projectRows = projects.items
+      .map((row, uiIndex) => ({ row, uiIndex }))
+      .filter(({ row }) => hasContent(row))
+    const projectPayloadIndexToUiIndex = projectRows.map(({ uiIndex }) => uiIndex)
     try {
       const payload: ProfileDetailsPayload = {
         first_name: emptyToNull(identity.first_name),
@@ -356,7 +612,7 @@ export function useOnboardingProfile({
           end_date: row.end_date || null,
           description: emptyToNull(row.description),
         })),
-        projects: projects.items.filter(hasContent).map((row) => ({
+        projects: projectRows.map(({ row }) => ({
           project_id: row.project_id,
           name: row.name.trim(),
           summary: emptyToNull(row.summary),
@@ -370,7 +626,13 @@ export function useOnboardingProfile({
       if (successMessage) setToast({ variant: "success", message: successMessage })
       return true
     } catch (error) {
-      setToast({ variant: "error", message: messageOf(error) })
+      if (error instanceof ApiError) {
+        const errors = apiFieldErrors(error, projectPayloadIndexToUiIndex)
+        setFieldErrors(errors)
+        if (error.code === "projects_stale") setProjectConflict(error.message)
+        focusFirstError(errors)
+      }
+      setToast(errorToast(error))
       return false
     } finally {
       setSaving(false)
@@ -392,13 +654,15 @@ export function useOnboardingProfile({
   return {
     status,
     redirectTo,
+    loadError,
+    retry,
     accountEmail,
     identity,
     setIdentityField,
     socialLinks,
     setSocialLink,
     summary,
-    setSummary,
+    setSummary: setSummaryField,
     technologies,
     addTechnology,
     removeTechnology,
@@ -406,6 +670,11 @@ export function useOnboardingProfile({
     certifications,
     employment,
     projects,
+    projectConflict,
+    reloadingProjects,
+    reloadProjects,
+    fieldErrors,
+    fieldError: (path: string) => fieldErrors[path],
     uploadCv,
     reupload,
     saving,

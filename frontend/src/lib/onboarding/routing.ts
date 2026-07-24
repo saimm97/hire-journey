@@ -11,9 +11,16 @@ export const COMPLETED_DESTINATION = '/dashboard'
 export function onboardingDestination(snapshot: OnboardingSnapshot | null): string {
   if (!snapshot || !snapshot.source_resume) return '/onboarding/profile'
   if (snapshot.onboarding_complete) return COMPLETED_DESTINATION
-  const { first_name, last_name, title } = snapshot.profile
-  const detailsDone = Boolean(first_name?.trim() && last_name?.trim() && title?.trim())
-  return detailsDone ? '/onboarding/preferences' : '/onboarding/profile'
+  if (snapshot.completion_issues?.some((issue) => issue.step === 'profile'))
+    return '/onboarding/profile'
+
+  // Compatibility with snapshots produced during a rolling backend deployment.
+  if (!snapshot.completion_issues) {
+    const { first_name, last_name, title } = snapshot.profile
+    if (!first_name?.trim() || !last_name?.trim() || !title?.trim())
+      return '/onboarding/profile'
+  }
+  return '/onboarding/preferences'
 }
 
 /** Where to send the user after authenticating. Never blocks login on an API hiccup. */

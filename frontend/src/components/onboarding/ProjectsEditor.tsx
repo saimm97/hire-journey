@@ -18,13 +18,20 @@ export function ProjectsEditor({ controller }: { controller: ListController<Edit
   return (
     <div className="space-y-3">
       {controller.items.map((item, index) => (
-        <EditorCard key={item.project_id ?? `new-${index}`} onRemove={() => controller.remove(index)}>
+        <EditorCard
+          key={item.project_id ?? `new-${index}`}
+          onRemove={() => controller.remove(index)}
+          error={controller.rowError(index)}
+          fieldPath={`projects.${index}`}
+        >
           <div className="grid gap-3 pr-8 sm:grid-cols-2">
             <TextField
               label="Name"
               value={item.name}
               onChange={(value) => controller.update(index, { name: value })}
               className="sm:col-span-2"
+              fieldPath={controller.fieldPath(index, "name")}
+              error={controller.fieldError(index, "name")}
             />
             <TextField
               label="GitHub URL"
@@ -32,6 +39,8 @@ export function ProjectsEditor({ controller }: { controller: ListController<Edit
               onChange={(value) => controller.update(index, { github_url: value })}
               placeholder="github.com/you/project"
               mono
+              fieldPath={controller.fieldPath(index, "github_url")}
+              error={controller.fieldError(index, "github_url")}
             />
             <TextField
               label="Live URL"
@@ -39,6 +48,8 @@ export function ProjectsEditor({ controller }: { controller: ListController<Edit
               onChange={(value) => controller.update(index, { deployed_url: value })}
               placeholder="project.dev"
               mono
+              fieldPath={controller.fieldPath(index, "deployed_url")}
+              error={controller.fieldError(index, "deployed_url")}
             />
           </div>
           <Field label="Summary" className="mr-8">
@@ -62,6 +73,8 @@ export function ProjectsEditor({ controller }: { controller: ListController<Edit
               }
               placeholder="Add tech"
               addLabel="Add technology"
+              fieldPath={controller.fieldPath(index, "technologies")}
+              error={controller.fieldError(index, "technologies")}
             />
           </div>
         </EditorCard>

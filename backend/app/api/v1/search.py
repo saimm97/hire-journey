@@ -25,14 +25,20 @@ async def run_scan(
 
 @router.get("/results", response_model=SearchResultsResponse)
 async def get_results(
-    terms: list[str] = Query(min_length=1, description="Keywords to score jobs against"),
+    terms: list[str] | None = Query(
+        default=None,
+        description="Optional keyword override; defaults to the caller's desired roles",
+    ),
     min_score: int = Query(default=0, ge=0, le=100),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> SearchResultsResponse:
-    """Rank stored jobs against the terms plus the caller's latest resume skills."""
+    """Rank stored jobs against the caller's profile (roles + technologies).
+
+    Pass `terms` to override the roles with an explicit search.
+    """
     return await search_service.get_results(
         db=db,
         user_id=current_user.id,

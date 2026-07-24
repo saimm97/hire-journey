@@ -13,6 +13,7 @@ import fitz
 import pytest
 from sqlalchemy import delete, func, select
 
+from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models import Company, EmploymentHistory, Profile, Resume, User
 from app.schemas.extraction import (
@@ -238,9 +239,7 @@ async def test_failure_rolls_back_everything(db, test_user, monkeypatch):
         await profile_service.process_cv(db, user_id, "cv.pdf", _pdf_bytes())
 
     assert (
-        await db.scalar(
-            select(func.count()).select_from(Resume).where(Resume.user_id == user_id)
-        )
+        await db.scalar(select(func.count()).select_from(Resume).where(Resume.user_id == user_id))
     ) == 0
     assert (
         await db.execute(select(Profile).where(Profile.user_id == user_id))
@@ -282,6 +281,79 @@ async def test_resume_limit_enforced(db, test_user, monkeypatch):
     _stub_extraction(monkeypatch, ResumeExtraction(first_name="Jane"))
     with pytest.raises(resume_service.ResumeLimitError):
         await profile_service.process_cv(db, user_id, "cv.pdf", _pdf_bytes())
+
+
+async def test_identical_upload_reuses_resume(db, test_user, monkeypatch):
+    user_id = test_user.id
+    data = _pdf_bytes("Same content")
+    _stub_extraction(monkeypatch, ResumeExtraction(first_name="Jane"))
+
+    first_profile, _, _ = await profile_service.process_cv(db, user_id, "first.pdf", data)
+    first_resume_id = first_profile.source_resume_id
+    second_profile, _, _ = await profile_service.process_cv(db, user_id, "retry.pdf", data)
+
+    assert second_profile.source_resume_id == first_resume_id
+    assert (
+        await db.scalar(select(func.count()).select_from(Resume).where(Resume.user_id == user_id))
+    ) == 1
+    resume = await db.get(Resume, first_resume_id)
+    assert resume is not None
+    assert resume.file_name == "retry.pdf"
+    assert resume.parsed_content["first_name"] == "Jane"
+
+
+async def test_different_uploads_create_separate_resumes(db, test_user, monkeypatch):
+    user_id = test_user.id
+    _stub_extraction(monkeypatch, ResumeExtraction(first_name="Jane"))
+
+    first_profile, _, _ = await profile_service.process_cv(
+        db, user_id, "first.pdf", _pdf_bytes("First resume")
+    )
+    first_resume_id = first_profile.source_resume_id
+    second_profile, _, _ = await profile_service.process_cv(
+        db, user_id, "second.pdf", _pdf_bytes("Second resume")
+    )
+
+    assert second_profile.source_resume_id != first_resume_id
+    assert (
+        await db.scalar(select(func.count()).select_from(Resume).where(Resume.user_id == user_id))
+    ) == 2
+
+
+async def test_identical_upload_reuses_resume_at_limit(db, test_user, monkeypatch):
+    user_id = test_user.id
+    data = _pdf_bytes("Already stored")
+    raw_content = profile_service.document_parser.to_text(data, "stored.pdf")
+    matching = Resume(user_id=user_id, file_name="stored.pdf", raw_content=raw_content)
+    other = Resume(user_id=user_id, file_name="other.pdf", raw_content="different")
+    db.add_all([matching, other])
+    await db.commit()
+    await db.refresh(matching)
+    matching_id = matching.id
+    _stub_extraction(monkeypatch, ResumeExtraction(first_name="Jane"))
+
+    profile, _, _ = await profile_service.process_cv(db, user_id, "retry.pdf", data)
+
+    assert profile.source_resume_id == matching_id
+    assert (
+        await db.scalar(select(func.count()).select_from(Resume).where(Resume.user_id == user_id))
+    ) == settings.max_resumes_per_user
+
+
+async def test_concurrent_identical_uploads_create_one_resume(db, test_user, monkeypatch):
+    user_id = test_user.id
+    data = _pdf_bytes("Concurrent retry")
+    _stub_extraction(monkeypatch, ResumeExtraction(first_name="Jane"))
+
+    async def upload() -> None:
+        async with AsyncSessionLocal() as session:
+            await profile_service.process_cv(session, user_id, "cv.pdf", data)
+
+    await asyncio.gather(upload(), upload())
+
+    assert (
+        await db.scalar(select(func.count()).select_from(Resume).where(Resume.user_id == user_id))
+    ) == 1
 
 
 async def test_concurrent_company_resolution_creates_one_row(db):

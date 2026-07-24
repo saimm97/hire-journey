@@ -2,20 +2,21 @@
 Quick smoke test for ATS source adapters.
 Run from backend/: python scripts/test_sources.py
 """
+
 import asyncio
 import sys
 
 sys.path.append(".")
 
-from app.sources.greenhouse import GreenhouseSource
 from app.sources.ashby import AshbySource
+from app.sources.greenhouse import GreenhouseSource
 from app.sources.lever import LeverSource
 
 
 async def test_source(name, source, slug, company):
     print(f"\n{'='*50}")
     print(f"Testing {name} — {company} (slug: {slug})")
-    print("="*50)
+    print("=" * 50)
     try:
         jobs = await source.fetch(slug, company)
         if not jobs:

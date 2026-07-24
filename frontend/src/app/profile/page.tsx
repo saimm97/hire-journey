@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
+import { OnboardingLoadError } from '@/components/onboarding/OnboardingLoadError'
 import { PreferencesForm } from '@/components/onboarding/PreferencesForm'
 import { ProfileForm } from '@/components/onboarding/ProfileForm'
 import { ResumeDropzone } from '@/components/onboarding/ResumeDropzone'
@@ -48,6 +49,9 @@ export default function ProfilePage() {
             <Loader2 className="size-5 animate-spin" /> Loading…
           </div>
         )}
+        {details.status === 'load_error' && (
+          <OnboardingLoadError message={details.loadError} onRetry={details.retry} />
+        )}
         {(details.status === 'empty' || details.status === 'parsing') && (
           <ResumeDropzone onFile={details.uploadCv} parsing={details.status === 'parsing'} />
         )}
@@ -68,6 +72,9 @@ export default function ProfilePage() {
           </section>
         )}
 
+        {preferences.status === 'load_error' && (
+          <OnboardingLoadError message={preferences.loadError} onRetry={preferences.retry} />
+        )}
         {preferences.status === 'ready' && (
           <section className="space-y-4">
             <h2 className="font-mono text-[11px] uppercase tracking-wider text-brand-muted">

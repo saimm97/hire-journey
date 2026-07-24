@@ -38,11 +38,41 @@ const SENIORITY_OPTIONS: PillOption<SeniorityLevel>[] = [
   { value: "director", label: "Director" },
 ]
 
+// Fields that own a dedicated Section below; anything else surfaces in the summary.
+const SECTION_FIELDS = [
+  "desired_roles",
+  "desired_locations",
+  "work_modes_preferred",
+  "seniority_level",
+  "minimum_salary",
+]
+
 /** The preferences step: roles, locations, work modes, seniority, salary. */
 export function PreferencesForm({ state }: { state: PreferencesState }) {
+  // Any field error not addressable by a Section — should be rare, but never
+  // leave one invisible (it would read as "fix the field" with nothing lit up).
+  const unmapped = Object.entries(state.fieldErrors).filter(
+    ([key]) => !SECTION_FIELDS.some((field) => key === field || key.startsWith(`${field}.`)),
+  )
+
   return (
     <div className="space-y-10 rounded-2xl border border-brand-border bg-white p-6 shadow-[0_4px_20px_rgba(35,31,28,0.04)] sm:p-8">
-      <Section title="Desired roles">
+      {unmapped.length > 0 && (
+        <div className="rounded-lg border border-red-500 bg-red-50 p-3 text-sm text-red-700">
+          <p className="font-medium">Please fix the following:</p>
+          <ul className="mt-1 list-inside list-disc">
+            {unmapped.map(([key, message]) => (
+              <li key={key}>{message}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <Section
+        title="Desired roles"
+        fieldPath="desired_roles"
+        error={state.groupError("desired_roles")}
+      >
         <MultiSelect
           values={state.roles}
           onAdd={state.addRole}
@@ -54,7 +84,11 @@ export function PreferencesForm({ state }: { state: PreferencesState }) {
         />
       </Section>
 
-      <Section title="Desired locations">
+      <Section
+        title="Desired locations"
+        fieldPath="desired_locations"
+        error={state.groupError("desired_locations")}
+      >
         <div className="space-y-3">
           <LazyLocationPicker buttonLabel="Add location" onSelect={state.addLocation} />
           {state.locations.length > 0 && (
@@ -71,7 +105,11 @@ export function PreferencesForm({ state }: { state: PreferencesState }) {
         </div>
       </Section>
 
-      <Section title="Work modes">
+      <Section
+        title="Work modes"
+        fieldPath="work_modes_preferred"
+        error={state.groupError("work_modes_preferred")}
+      >
         <div className="flex flex-wrap gap-2">
           {WORK_MODES.map((mode) => {
             const active = state.workModes.includes(mode)
@@ -95,7 +133,11 @@ export function PreferencesForm({ state }: { state: PreferencesState }) {
         </div>
       </Section>
 
-      <Section title="Seniority">
+      <Section
+        title="Seniority"
+        fieldPath="seniority_level"
+        error={state.fieldError("seniority_level")}
+      >
         <PillSelect
           options={SENIORITY_OPTIONS}
           value={state.seniority}
@@ -103,7 +145,11 @@ export function PreferencesForm({ state }: { state: PreferencesState }) {
         />
       </Section>
 
-      <Section title="Minimum salary">
+      <Section
+        title="Minimum salary"
+        fieldPath="minimum_salary"
+        error={state.fieldError("minimum_salary")}
+      >
         <SalaryField value={state.minimumSalary} onChange={state.setMinimumSalary} />
       </Section>
     </div>

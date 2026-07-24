@@ -29,6 +29,10 @@ class ProfileNotFoundError(Exception):
 class ProjectOwnershipError(Exception):
     """A submitted project_id does not belong to the current profile."""
 
+    def __init__(self, message: str, row_index: int) -> None:
+        self.row_index = row_index
+        super().__init__(message)
+
 
 class DocumentParseError(Exception):
     """The uploaded document could not be read or contained no extractable text."""

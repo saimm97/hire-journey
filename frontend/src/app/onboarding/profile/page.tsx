@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
+import { OnboardingLoadError } from '@/components/onboarding/OnboardingLoadError'
 import { OnboardingShell } from '@/components/onboarding/OnboardingShell'
 import { ProfileForm } from '@/components/onboarding/ProfileForm'
 import { ResumeDropzone } from '@/components/onboarding/ResumeDropzone'
@@ -29,6 +30,9 @@ export default function OnboardingProfile() {
         <div className="flex items-center justify-center gap-2 py-24 text-brand-muted">
           <Loader2 className="size-5 animate-spin" /> Loading…
         </div>
+      )}
+      {state.status === 'load_error' && (
+        <OnboardingLoadError message={state.loadError} onRetry={state.retry} />
       )}
       {(state.status === 'empty' || state.status === 'parsing') && (
         <ResumeDropzone onFile={state.uploadCv} parsing={state.status === 'parsing'} />

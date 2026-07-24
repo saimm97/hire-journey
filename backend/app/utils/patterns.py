@@ -14,6 +14,9 @@ PRESENT_RE = re.compile(r"^(present|current|now|ongoing)$", re.I)
 
 # Strict month format for user-edited payloads
 STRICT_MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+# Education/certification dates may be year-only (YYYY) or a full month (YYYY-MM);
+# resumes routinely list just the year and we preserve that fidelity.
+STRICT_YEAR_OR_MONTH_RE = re.compile(r"^\d{4}(-(0[1-9]|1[0-2]))?$")
 
 # URL normalization: a schemeless value that still looks like a web address
 DOMAIN_LIKE_RE = re.compile(r"^[\w-]+(?:\.[\w-]+)+(?:/\S*)?$")

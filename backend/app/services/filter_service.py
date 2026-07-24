@@ -37,7 +37,8 @@ def apply_filters(
     block: list[str],
 ) -> list[RawJob]:
     return [
-        j for j in jobs
+        j
+        for j in jobs
         if passes_title_filter(j.title, positive, negative)
         and passes_location_filter(j.location, allow, block)
     ]

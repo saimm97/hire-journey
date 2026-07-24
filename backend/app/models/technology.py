@@ -12,9 +12,7 @@ if TYPE_CHECKING:
 
 class Technology(Base):
     __tablename__ = "technologies"
-    __table_args__ = (
-        CheckConstraint("name = lower(name)", name="ck_technologies_name_lowercase"),
-    )
+    __table_args__ = (CheckConstraint("name = lower(name)", name="ck_technologies_name_lowercase"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)

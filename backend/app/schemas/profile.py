@@ -8,7 +8,7 @@ the correct behavior (unlike LLM output, which gets lenient normalization).
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 from app.schemas.project import ProjectRead
 from app.utils import normalization, patterns
@@ -36,6 +36,39 @@ def _month_or_none(value: str | None) -> str | None:
     if not 1900 <= int(value[:4]) <= 2100:
         raise ValueError("year must be between 1900 and 2100")
     return value
+
+
+def _year_or_month_or_none(value: str | None) -> str | None:
+    """Validate a year-only (YYYY) or full-month (YYYY-MM) string; blank clears.
+
+    Education and certification dates keep whatever precision the resume gave —
+    a bare year stays a year rather than being padded to a month we never saw.
+    """
+    if value is None or not value.strip():
+        return None
+    value = value.strip()
+    if not patterns.STRICT_YEAR_OR_MONTH_RE.match(value):
+        raise ValueError("must be in YYYY or YYYY-MM format")
+    if not 1900 <= int(value[:4]) <= 2100:
+        raise ValueError("year must be between 1900 and 2100")
+    return value
+
+
+def _unambiguously_precedes(start: str | None, end: str | None) -> bool:
+    """Whether an end date is definitely earlier than its start date.
+
+    A year-only value has intentionally unknown month precision. Within the
+    same year, only reject when both sides include months and those months are
+    reversed. Different years are always comparable.
+    """
+    if not start or not end:
+        return False
+    start_year, end_year = int(start[:4]), int(end[:4])
+    if end_year != start_year:
+        return end_year < start_year
+    if len(start) == 7 and len(end) == 7:
+        return end < start
+    return False
 
 
 def _url_or_none(value: str | None) -> str | None:
@@ -119,12 +152,21 @@ class EmploymentRead(BaseModel):
     description: str | None
 
 
+class CompletionIssue(BaseModel):
+    """One unmet onboarding requirement, including the step that owns it."""
+
+    step: Literal["profile", "preferences"]
+    path: list[str | int]
+    message: str
+
+
 class OnboardingSnapshot(BaseModel):
     profile: ProfileRead
     source_resume: ResumeMeta | None
     employment_history: list[EmploymentRead]
     projects: list[ProjectRead]
     onboarding_complete: bool
+    completion_issues: list[CompletionIssue]
 
 
 # ── Details step (PUT /profile/details) ────────────────────────────────
@@ -151,7 +193,14 @@ class EducationEntry(BaseModel):
     @field_validator("start_date", "end_date")
     @classmethod
     def _months(cls, value: str | None) -> str | None:
-        return _month_or_none(value)
+        return _year_or_month_or_none(value)
+
+    @field_validator("end_date")
+    @classmethod
+    def _ordered(cls, value: str | None, info: ValidationInfo) -> str | None:
+        if _unambiguously_precedes(info.data.get("start_date"), value):
+            raise ValueError("education end date cannot precede its start date")
+        return value
 
 
 class CertificationEntry(BaseModel):
@@ -163,7 +212,14 @@ class CertificationEntry(BaseModel):
     @field_validator("issued_at", "expires_at")
     @classmethod
     def _months(cls, value: str | None) -> str | None:
-        return _month_or_none(value)
+        return _year_or_month_or_none(value)
+
+    @field_validator("expires_at")
+    @classmethod
+    def _ordered(cls, value: str | None, info: ValidationInfo) -> str | None:
+        if _unambiguously_precedes(info.data.get("issued_at"), value):
+            raise ValueError("expiration date cannot precede its issue date")
+        return value
 
 
 class EmploymentEntry(BaseModel):
@@ -178,12 +234,12 @@ class EmploymentEntry(BaseModel):
     def _months(cls, value: str | None) -> str | None:
         return _month_or_none(value)
 
-    @model_validator(mode="after")
-    def _ordered(self) -> "EmploymentEntry":
-        # Lexicographic compare is correct for zero-padded YYYY-MM strings.
-        if self.start_date and self.end_date and self.end_date < self.start_date:
+    @field_validator("end_date")
+    @classmethod
+    def _ordered(cls, value: str | None, info: ValidationInfo) -> str | None:
+        if _unambiguously_precedes(info.data.get("start_date"), value):
             raise ValueError("employment end month cannot precede its start month")
-        return self
+        return value
 
 
 class ProjectEntry(BaseModel):
@@ -240,25 +296,37 @@ class PreferencesUpdate(BaseModel):
     # Upper bound keeps the value safely inside the INTEGER column (int32).
     minimum_salary: int | None = Field(default=None, ge=0, le=100_000_000)
     desired_roles: list[str] = Field(max_length=100)
-    desired_locations: list[str] = Field(default_factory=list, max_length=100)
+    desired_locations: list[str] = Field(max_length=100)
     work_modes_preferred: list[WorkMode]
     seniority_level: SeniorityLevel
 
-    @field_validator("desired_roles", "desired_locations")
+    @field_validator("desired_locations")
     @classmethod
-    def _clean_lists(cls, value: list[str]) -> list[str]:
-        return _clean_str_list(value)
+    def _require_locations(cls, value: list[str]) -> list[str]:
+        cleaned = _clean_str_list(value)
+        if not cleaned:
+            raise ValueError("Add at least one desired location.")
+        return cleaned
 
-    @model_validator(mode="after")
-    def _completion_requirements(self) -> "PreferencesUpdate":
-        """This step's completion rules: cleaned lists must not end up empty."""
-        if not self.desired_roles:
-            raise ValueError("at least one desired role is required")
-        if not self.work_modes_preferred:
-            raise ValueError("at least one preferred work mode is required")
+    # Field-level (not model-level) so the required-empty errors carry a concrete
+    # loc — ['body', 'desired_roles'] — the frontend can map to the right control.
+    # A model_validator would report an empty loc the client cannot address.
+    @field_validator("desired_roles")
+    @classmethod
+    def _require_roles(cls, value: list[str]) -> list[str]:
+        cleaned = _clean_str_list(value)
+        if not cleaned:
+            raise ValueError("Add at least one desired role.")
+        return cleaned
+
+    @field_validator("work_modes_preferred")
+    @classmethod
+    def _require_work_modes(cls, value: list[WorkMode]) -> list[WorkMode]:
         # Dedupe while preserving order (Literal values are already valid).
-        self.work_modes_preferred = list(dict.fromkeys(self.work_modes_preferred))
-        return self
+        deduped = list(dict.fromkeys(value))
+        if not deduped:
+            raise ValueError("Pick at least one work mode.")
+        return deduped
 
 
 # ── Post-onboarding partial editing (PATCH /profile) ───────────────────

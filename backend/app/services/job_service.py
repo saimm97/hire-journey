@@ -9,13 +9,14 @@ already stored last week is not re-inserted; its description is backfilled if
 missing and updated_at reflects the latest sighting.
 """
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.company import Company
 from app.models.job import Job
+from app.sources import SOURCES, source_for_url
 from app.sources.base import RawJob
 
 
@@ -34,14 +35,23 @@ async def upsert_job(db: AsyncSession, raw: RawJob, company: Company) -> Job | N
         url=raw.url,
         location=raw.location or None,
         description=new_desc,
+        posted_at=raw.posted_at,
+        deadline=raw.deadline,
     )
-    # If the job already exists (same URL), backfill description if it was NULL.
-    # All other fields are intentionally left unchanged — title and location come
-    # from the same API and won't drift meaningfully between scans.
+    # If the job already exists (same URL), backfill fields only where they are
+    # still NULL — COALESCE keeps whatever we already stored. Title and location
+    # are intentionally left unchanged: they come from the same API and won't
+    # drift meaningfully between scans. updated_at is bumped unconditionally so
+    # it records the last time we saw this posting live on the board.
+    cols = Job.__table__.c
     stmt = stmt.on_conflict_do_update(
         index_elements=["url"],
-        set_={"description": new_desc},
-        where=Job.__table__.c.description.is_(None),
+        set_={
+            "description": func.coalesce(cols.description, new_desc),
+            "posted_at": func.coalesce(cols.posted_at, raw.posted_at),
+            "deadline": func.coalesce(cols.deadline, raw.deadline),
+            "updated_at": func.now(),
+        },
     )
     await db.execute(stmt)
 
@@ -50,31 +60,34 @@ async def upsert_job(db: AsyncSession, raw: RawJob, company: Company) -> Job | N
 
 
 async def ensure_description(db: AsyncSession, job: Job) -> None:
-    """Populate job.description from the Greenhouse per-job API if it is NULL.
+    """Populate job.description from its board's per-job API if it is NULL.
 
-    Ashby and Lever return descriptions in their list endpoints, so a missing
-    description almost always means a Greenhouse job; the attempt is harmless
-    (and yields nothing) for the others.
+    The posting URL identifies which adapter to ask. Adapters whose list API
+    already returns descriptions answer None, so a job stored without one is
+    normally from a board (like Greenhouse) that needs the extra call.
     """
     if job.description:
         return
     if not job.company.slug:
         return
 
-    from app.sources.greenhouse import GreenhouseSource  # avoid circular at module level
+    source = source_for_url(job.url)
+    # Unrecognised host (e.g. a custom ATS domain): ask every adapter and take
+    # the first that can resolve it.
+    candidates = [source] if source else list(SOURCES.values())
 
-    desc = await GreenhouseSource.fetch_description(job.company.slug, job.url)
-    if desc:
-        job.description = desc
-        await db.flush()
+    for candidate in candidates:
+        desc = await candidate.fetch_description(job.company.slug, job.url)
+        if desc:
+            job.description = desc
+            await db.flush()
+            return
 
 
 async def get_job_with_description(db: AsyncSession, job_id: int) -> Job | None:
     """Load a job (with company) and lazily backfill its description."""
     job = (
-        await db.execute(
-            select(Job).where(Job.id == job_id).options(selectinload(Job.company))
-        )
+        await db.execute(select(Job).where(Job.id == job_id).options(selectinload(Job.company)))
     ).scalar_one_or_none()
 
     if job is not None:

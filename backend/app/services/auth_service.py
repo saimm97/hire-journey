@@ -17,9 +17,7 @@ from app.security import hash_password, verify_password
 async def register_user(db: AsyncSession, payload: UserCreate) -> User:
     """Create a user, rejecting a taken username or email."""
     existing = await db.execute(
-        select(User).where(
-            or_(User.username == payload.username, User.email == payload.email)
-        )
+        select(User).where(or_(User.username == payload.username, User.email == payload.email))
     )
     conflict = existing.scalars().first()
     if conflict is not None:
@@ -59,9 +57,7 @@ async def _unique_username(db: AsyncSession, email: str) -> str:
         base = f"{base}user"
     base = base[:40]
     candidate, suffix = base, 0
-    while (
-        await db.execute(select(User.id).where(User.username == candidate))
-    ).first() is not None:
+    while (await db.execute(select(User.id).where(User.username == candidate))).first() is not None:
         suffix += 1
         candidate = f"{base}{suffix}"
     return candidate
@@ -90,9 +86,7 @@ async def authenticate_google_user(db: AsyncSession, credential: str) -> User:
         await db.commit()
     except IntegrityError:  # concurrent first sign-in for the same account
         await db.rollback()
-        user = (
-            await db.execute(select(User).where(User.email == email))
-        ).scalar_one_or_none()
+        user = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
         if user is None:
             raise GoogleAuthError(messages.GOOGLE_ACCOUNT_FAILED)
     else:
