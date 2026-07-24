@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { ArrowRight, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 
 import { GoogleAuthButton } from '@/components/auth/GoogleAuthButton'
@@ -42,7 +42,7 @@ const FIELD =
   'h-11 rounded-lg border-brand-border bg-white shadow-sm placeholder:text-brand-muted/60 focus-visible:border-brand-violet focus-visible:ring-2 focus-visible:ring-brand-violet/25'
 
 function strengthOf(pw: string): number {
-  if (!pw) return 0;
+  if (!pw) return 0
   let s = 0
   if (pw.length >= 8) s++
   if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) s++
@@ -60,7 +60,8 @@ export default function Register() {
     defaultValues: { username: '', email: '', password: '' },
   })
 
-  const strength = strengthOf(form.watch('password'))
+  const password = useWatch({ control: form.control, name: 'password' })
+  const strength = strengthOf(password)
   const strengthColor = ['bg-brand-border', 'bg-red-500', 'bg-amber-500', 'bg-brand-emerald'][
     strength
   ]
