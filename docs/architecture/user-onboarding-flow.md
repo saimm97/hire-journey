@@ -1,8 +1,9 @@
 # User onboarding flow
 
-- Status: current as of 2026-07-20
+- Status: current as of 2026-07-24
 - Implementation branch: `feat/user-onboarding`
 - Comparison base: `development` at `0325655`
+- Error-hardening implementation: `d8d626a`
 - Related decision: [ADR-0002](../adr/0002-resume-first-snapshot-onboarding.md)
 
 This document describes the user journey from account creation through a
@@ -24,6 +25,8 @@ flowchart TD
     Google --> Lookup
     Existing --> Dashboard["/dashboard"]
 
+    Lookup -->|Request fails| LoadError["Stop; show safe error + Retry"]
+    LoadError --> Lookup
     Lookup --> State{"Onboarding state"}
     State -->|No profile or source resume| ProfileStep["/onboarding/profile"]
     State -->|Resume present; core details missing| ProfileStep
@@ -32,11 +35,15 @@ flowchart TD
 
     ProfileStep --> Upload["Upload PDF or DOCX<br/>up to 5 MB"]
     Upload --> Parse["POST /profile/cv<br/>extract text and structured data"]
-    Parse -->|Failure| UploadError["Show actionable error<br/>keep user on upload step"]
+    Parse -->|Failure or timeout| UploadError["Show actionable error<br/>allow same-file retry"]
     UploadError --> Upload
     Parse --> Persist["Transactionally persist resume,<br/>profile, employment, projects, and skills"]
     Persist --> Review["Prefilled, editable profile form"]
     Review --> SaveDetails["PUT /profile/details"]
+    SaveDetails -->|Field validation| InlineErrors["Highlight and focus exact fields"]
+    InlineErrors --> Review
+    SaveDetails -->|projects_stale| ReloadProjects["Reload latest projects only"]
+    ReloadProjects --> Review
     SaveDetails --> Preferences
 
     Preferences --> SavePreferences["PUT /profile/preferences"]
@@ -68,9 +75,10 @@ flag from disagreeing with the underlying data.
 | Not started | `GET /profile` returns `404`, or no source resume exists | `/onboarding/profile` |
 | Resume uploaded, details incomplete | A source resume exists, but first name, last name, or title is blank | `/onboarding/profile` |
 | Details ready, preferences incomplete | Source resume, first name, last name, and title exist; at least one preference requirement is missing | `/onboarding/preferences` |
-| Complete | Source resume, first name, last name, title, at least one desired role, at least one work mode, and seniority all exist | `/dashboard` |
+| Complete | Source resume, first name, last name, title, at least one desired role, at least one desired location, at least one work mode, and seniority all exist | `/dashboard` |
 
-Desired locations and minimum salary are optional and do not affect completion.
+Minimum salary is optional and does not affect completion. Desired location is
+required.
 
 ## End-to-end user journey
 
@@ -89,7 +97,10 @@ Desired locations and minimum salary are optional and do not affect completion.
 
 `postAuthDestination()` treats a profile lookup failure as non-blocking and
 falls back to `/dashboard`; a temporary profile API failure therefore does not
-turn a successful login into a failed login.
+turn a successful login into a failed login. Once an onboarding or profile
+editor is open, an initial snapshot failure does not render a blank editable
+form. The page shows a load-error state with Retry so a save cannot overwrite
+stored values with empty client state.
 
 ### 2. Upload and parse a resume
 
@@ -119,6 +130,22 @@ backend repeats both checks and does not trust the client-provided size.
 The LLM call happens before database locks or writes. If parsing, extraction, or
 persistence fails, no partial onboarding state is committed.
 
+Resume creation is content-idempotent after text extraction. While holding the
+existing per-user database lock, the service looks for a resume with identical,
+non-empty extracted text before enforcing the two-resume limit. A match is
+updated and reused, including when the account is already at the limit.
+Concurrent identical uploads serialize on the same lock and therefore produce
+one resume row. Logs record only the user and reused resume IDs, never resume
+content.
+
+The browser gives CV extraction 120 seconds; other API requests use a 30-second
+deadline. The deadline remains active until a success or error response body is
+fully parsed, not merely until response headers arrive. A timed-out request may
+still finish on the server, so content idempotency makes a same-file retry safe.
+The hidden file input is reset after each selection so selecting the identical
+file emits another change event. The dropzone supports click, drag-and-drop,
+Enter, and Space.
+
 The resume row stores extracted text in `raw_content` and the original
 structured extraction in `parsed_content`. The onboarding snapshot exposes only
 resume metadata and its summary; it never returns the raw resume text.
@@ -137,20 +164,36 @@ After extraction, the user can edit:
 `PUT /api/v1/profile/details` is a full replacement of the details step. Empty
 UI rows are omitted, omitted collection entries are removed, and the entire save
 is atomic. User-edited payloads are validated strictly: required row fields,
-`YYYY-MM` dates, date ordering, URLs, collection limits, and string lengths must
-all be valid.
+date formats and ordering, URLs, collection limits, and string lengths must all
+be valid.
+
+Employment dates require `YYYY-MM`. Education and certification dates accept
+either `YYYY` or `YYYY-MM`, preserving the precision present in a resume instead
+of inventing January for a year-only value. Those fields default to a native
+month picker and offer an explicit year-only mode. Both client and server reject
+an end year/month that unambiguously precedes its start; when one value has only
+year precision, two values in the same year are not treated as ordered.
 
 Project IDs are ownership-checked. Renaming a project that another profile also
 references uses copy-on-write, so another user's project identity is not
 modified. Shared company rows are reused case-insensitively and are never
 deleted when a profile changes its employment history.
 
+A submitted project ID that no longer belongs to the profile returns
+`409 projects_stale` with the submitted project-row index. The client preserves
+a payload-index-to-visible-row map when it filters blank rows, highlights the
+correct editor row, and offers **Reload latest projects**. Recovery fetches a
+fresh snapshot and replaces only the projects collection: unsaved identity,
+links, education, employment, technologies, and preferences remain untouched.
+The project editor alone is disabled while reloading. If reload fails, the
+existing project edits and recovery action remain available.
+
 ### 4. Choose job preferences
 
 The preferences step collects:
 
 - one or more desired roles;
-- zero or more desired locations;
+- one or more desired locations;
 - one or more work modes: remote, hybrid, or onsite;
 - one seniority level; and
 - an optional non-negative minimum salary.
@@ -159,7 +202,7 @@ The preferences step collects:
 the allowed work modes and seniority values, saves the preferences, and returns
 a fresh snapshot. The frontend moves to `/dashboard` only when that response
 reports `onboarding_complete: true`; otherwise it asks the user to finish the
-missing profile details.
+specific requirements listed in `completion_issues`.
 
 ### 5. Continue into the application
 
@@ -199,9 +242,48 @@ registration, login, Google authentication, and public auth configuration.
 
 `OnboardingSnapshot` is the shared response shape for the read, upload, detail,
 and preference steps. It contains the profile, source-resume metadata,
-employment history, projects, and computed completion state. Returning the same
-shape after every mutation lets the browser replace local state with the
-server's normalized source of truth.
+employment history, projects, computed completion state, and
+`completion_issues`. Each completion issue names its owning step, field path,
+and user-facing message. Returning the same shape after every mutation lets the
+browser replace local state with the server's normalized source of truth and
+explain every remaining requirement.
+
+## Error contract and client behavior
+
+Every backend non-2xx response uses one safe envelope:
+
+```json
+{
+  "error": {
+    "code": "validation_error",
+    "message": "Some details need fixing.",
+    "fields": [
+      {
+        "path": ["education", 0, "start_date"],
+        "message": "must be in YYYY or YYYY-MM format"
+      }
+    ]
+  }
+}
+```
+
+FastAPI request-validation errors, raised HTTP exceptions, onboarding domain
+errors, and uncaught exceptions all pass through this contract. Validation
+responses expose only paths and safe messages; they do not echo submitted
+values or Pydantic context. Unexpected `500` responses hide exception details,
+add a support `request_id` to the envelope, and retain CORS headers so the
+browser can actually display the response. Provider exception text is logged
+server-side but is not exposed as the extraction message.
+
+The frontend converts the envelope into `ApiError`, while retaining support for
+legacy FastAPI string and validation-array `detail` bodies. It never assigns an
+object to `Error.message`, eliminating `[object Object]` messages. Structured
+field paths become inline errors with `aria-invalid` and accessible
+descriptions; the details form focuses the first invalid field. Group controls
+map descendant paths such as `work_modes_preferred.0` to their section, and any
+unmappable preference error remains visible in a persistent summary. Malformed
+successful JSON becomes `invalid_response`; deadlines and network failures have
+separate safe messages. Error toasts show the request reference when present.
 
 ## Failure and recovery behavior
 
@@ -209,16 +291,18 @@ server's normalized source of truth.
 | --- | --- | --- |
 | `401` | Missing, expired, or invalid session | Sign in again |
 | `404` | Profile not started, or replacement resume not owned/found | Start with a resume upload; do not reuse foreign IDs |
-| `409` | Account already has the configured maximum number of resumes | Replace or remove a resume |
+| `409` | Resume limit, or a submitted project became stale | Replace/remove a different resume; retrying identical content reuses its row. For `projects_stale`, reload the latest projects and review them |
 | `413` | Upload exceeds the backend size limit | Upload a smaller document |
 | `415` | Filename is not PDF or DOCX | Choose a supported format |
-| `422` | Unreadable/no-text document, invalid edited data, or foreign project ID | Correct the file or highlighted profile data |
+| `422` | Unreadable/no-text document or invalid edited data | Correct the file or highlighted profile data |
+| `500` | Unexpected backend failure | Retry and give support the displayed request reference |
 | `502` | Every configured LLM attempt failed | Retry; inspect provider health if persistent |
 | `503` | No LLM provider key is configured | Configure at least one provider and restart the backend |
 
-The frontend keeps the user on the current step and presents an error toast when
-an onboarding request fails. A failed re-upload restores the existing editable
-profile rather than discarding it.
+The frontend keeps the user on the current step and combines inline field
+errors with a safe summary toast. A failed re-upload restores the existing
+editable profile rather than discarding it. A failed initial load stops at a
+Retry screen instead of exposing an empty form.
 
 ## Configuration
 
@@ -246,11 +330,15 @@ consistent.
 ## Verification coverage
 
 - Backend tests cover PDF/DOCX text extraction, provider fallback and retries,
-  atomic resume persistence, normalization, deduplication, re-upload behavior,
-  resume limits, API validation, project ownership, and computed completion.
-- Frontend tests cover snapshot routing, profile hydration and payload mapping,
-  local file validation, source-resume replacement, preference validation, and
-  completion redirects.
+  atomic resume persistence, normalization, deduplication, sequential and
+  concurrent same-content reuse, resume limits, structured error envelopes,
+  exact validation paths, project-stale row paths, and computed completion
+  issues.
+- Frontend tests cover snapshot routing, load-error recovery, profile hydration
+  and payload mapping, request/body-parsing deadlines, legacy and current error
+  parsing, accessible same-file upload retries, year/month inputs, inline field
+  mapping, filtered project-row mapping and projects-only recovery, preference
+  validation, and completion redirects.
 
 Relevant suites live in `backend/tests/test_*onboarding*`,
 `backend/tests/test_process_cv.py`, `backend/tests/test_document_parser.py`,
@@ -259,7 +347,9 @@ Relevant suites live in `backend/tests/test_*onboarding*`,
 ## Known limitations and follow-ups
 
 - Extraction is synchronous, so the upload request remains open during the LLM
-  call and the UI can show only an indeterminate parsing state.
+  call and the UI can show only an indeterminate parsing state. Client timeout
+  does not prove the server stopped processing; identical-content reuse makes
+  retries safe but does not provide progress.
 - Scanned/image-only PDFs are unsupported because there is no OCR stage.
 - Full-replacement detail saves are simple and deterministic but can overwrite
   a concurrent edit from another browser tab.
