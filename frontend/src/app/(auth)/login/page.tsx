@@ -33,7 +33,7 @@ type FormValues = z.infer<typeof schema>
 
 const LABEL = 'text-sm font-medium leading-5 text-brand-ink'
 const FIELD =
-  'h-11 rounded-lg border-brand-border bg-white placeholder:text-brand-muted/60 focus-visible:border-brand-violet focus-visible:ring-2 focus-visible:ring-brand-violet/25'
+  'h-11 rounded-lg border-brand-border bg-white placeholder:text-brand-muted/60 focus-visible:border-brand-primary focus-visible:ring-2 focus-visible:ring-brand-primary/25'
 
 export default function Login() {
   const router = useRouter()

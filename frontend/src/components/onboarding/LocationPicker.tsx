@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 
 const SELECT =
   "h-11 w-full rounded-lg border border-brand-border bg-white px-3 py-2 text-sm text-brand-ink " +
-  "outline-none transition-all focus:border-brand-violet focus:ring-2 focus:ring-brand-violet/20"
+  "outline-none transition-all focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20"
 
 interface LocationPickerProps {
   /** Called with the composed label, e.g. "Berlin, Berlin, Germany" or "Germany". */

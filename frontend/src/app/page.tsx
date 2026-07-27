@@ -19,7 +19,7 @@ export default function Home() {
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center bg-brand-paper">
-        <Loader2 className="h-6 w-6 animate-spin text-brand-violet" />
+        <Loader2 className="h-6 w-6 animate-spin text-brand-primary" />
       </div>
     )
   }
@@ -28,7 +28,7 @@ export default function Home() {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4 bg-brand-paper">
         <p className="text-brand-muted">You&apos;re not signed in.</p>
-        <Link href="/login" className="font-semibold text-brand-violet hover:underline">
+        <Link href="/login" className="font-semibold text-brand-primary hover:underline">
           Go to sign in →
         </Link>
       </div>

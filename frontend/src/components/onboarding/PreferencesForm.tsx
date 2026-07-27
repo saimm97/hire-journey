@@ -122,8 +122,8 @@ export function PreferencesForm({ state }: { state: PreferencesState }) {
                 className={cn(
                   "rounded-full border px-4 py-1.5 text-sm transition-colors",
                   active
-                    ? "border-brand-violet bg-brand-violet/10 font-medium text-brand-ink"
-                    : "border-brand-border bg-white text-brand-muted hover:border-brand-violet/60 hover:text-brand-ink",
+                    ? "border-brand-primary bg-brand-primary/10 font-medium text-brand-ink"
+                    : "border-brand-border bg-white text-brand-muted hover:border-brand-primary/60 hover:text-brand-ink",
                 )}
               >
                 {WORK_MODE_LABELS[mode]}

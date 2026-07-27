@@ -54,7 +54,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               ITEM,
               placement === "mobile" && "shrink-0",
               active
-                ? "bg-brand-violet/10 text-brand-violet"
+                ? "bg-brand-primary/10 text-brand-primary"
                 : "text-brand-muted hover:bg-brand-surface hover:text-brand-ink",
             )}
           >
@@ -69,14 +69,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-brand-paper lg:flex">
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-brand-border bg-white px-4 py-6 lg:flex">
         <div className="px-2">
-          <p className="text-lg font-semibold tracking-tight text-brand-violet">Hire Journey</p>
+          <p className="text-lg font-semibold tracking-tight text-brand-primary">Hire Journey</p>
           <p className="mt-0.5 text-xs text-brand-muted">Career workspace</p>
         </div>
 
         {navigation("desktop")}
 
         <div className="mt-auto flex items-center gap-3 border-t border-brand-border px-2 pt-4">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-violet/10 font-semibold text-brand-violet">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-primary/10 font-semibold text-brand-primary">
             {user?.username?.[0]?.toUpperCase() ?? "?"}
           </span>
           <span className="min-w-0 flex-1">
@@ -100,7 +100,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <header className="sticky top-0 z-30 border-b border-brand-border bg-white/95 backdrop-blur lg:hidden">
         <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
-          <p className="min-w-0 flex-1 text-lg font-semibold tracking-tight text-brand-violet">
+          <p className="min-w-0 flex-1 text-lg font-semibold tracking-tight text-brand-primary">
             Hire Journey
           </p>
           <span className="max-w-32 truncate text-sm font-medium text-brand-ink">

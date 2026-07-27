@@ -11,8 +11,8 @@
   --color-brand-ink: #172033;
   --color-brand-muted: #64748b;
   --color-brand-border: #e2e8f0;
-  --color-brand-violet: #4f46e5;
-  --color-brand-violet-dark: #4338ca;
+  --color-brand-primary: #2563eb;
+  --color-brand-primary-hover: #1d4ed8;
   --color-brand-coral: #f26b4e;
   --color-brand-coral-dark: #d9573d;
   --color-brand-emerald: #047857;
@@ -69,18 +69,18 @@
   --card-foreground: #172033;
   --popover: #ffffff;
   --popover-foreground: #172033;
-  --primary: #4f46e5;
+  --primary: #2563eb;
   --primary-foreground: #ffffff;
   --secondary: #f1f5f9;
   --secondary-foreground: #172033;
   --muted: #f1f5f9;
   --muted-foreground: #64748b;
-  --accent: #eef2ff;
-  --accent-foreground: #4338ca;
+  --accent: #eff6ff;
+  --accent-foreground: #1d4ed8;
   --destructive: #b42318;
   --border: #e2e8f0;
   --input: #e2e8f0;
-  --ring: #4f46e5;
+  --ring: #2563eb;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -89,12 +89,12 @@
   --radius: 0.625rem;
   --sidebar: #ffffff;
   --sidebar-foreground: #172033;
-  --sidebar-primary: #4f46e5;
+  --sidebar-primary: #2563eb;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #eef2ff;
-  --sidebar-accent-foreground: #4338ca;
+  --sidebar-accent: #eff6ff;
+  --sidebar-accent-foreground: #1d4ed8;
   --sidebar-border: #e2e8f0;
-  --sidebar-ring: #4f46e5;
+  --sidebar-ring: #2563eb;
 }
 
 .dark {

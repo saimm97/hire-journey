@@ -149,7 +149,7 @@ export function ProfileOverview({ details, preferences }: ProfileOverviewProps) 
     >
       <header className="px-5 py-7 sm:px-7">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-          <span className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-brand-violet/10 text-lg font-semibold text-brand-violet">
+          <span className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-brand-primary/10 text-lg font-semibold text-brand-primary">
             {initials(details.identity)}
           </span>
           <div className="min-w-0 flex-1">
@@ -168,7 +168,7 @@ export function ProfileOverview({ details, preferences }: ProfileOverviewProps) 
               {details.accountEmail && (
                 <a
                   href={`mailto:${details.accountEmail}`}
-                  className="inline-flex items-center gap-1.5 hover:text-brand-violet"
+                  className="inline-flex items-center gap-1.5 hover:text-brand-primary"
                 >
                   <Mail className="size-4" aria-hidden="true" />
                   {details.accountEmail}
@@ -177,7 +177,7 @@ export function ProfileOverview({ details, preferences }: ProfileOverviewProps) 
               {details.identity.phone_number && (
                 <a
                   href={`tel:${details.identity.phone_number}`}
-                  className="inline-flex items-center gap-1.5 hover:text-brand-violet"
+                  className="inline-flex items-center gap-1.5 hover:text-brand-primary"
                 >
                   <Phone className="size-4" aria-hidden="true" />
                   {details.identity.phone_number}
@@ -193,7 +193,7 @@ export function ProfileOverview({ details, preferences }: ProfileOverviewProps) 
                     href={externalHref(link.value)}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-brand-violet hover:underline"
+                    className="inline-flex items-center gap-1 text-brand-primary hover:underline"
                   >
                     <LinkIcon className="size-3.5" aria-hidden="true" />
                     {link.label}
@@ -226,7 +226,7 @@ export function ProfileOverview({ details, preferences }: ProfileOverviewProps) 
                   className="rounded-lg border border-brand-border bg-brand-paper p-4"
                 >
                   <h3 className="font-semibold text-brand-ink">{item.title}</h3>
-                  <p className="mt-0.5 text-sm font-medium text-brand-violet">
+                  <p className="mt-0.5 text-sm font-medium text-brand-primary">
                     {item.company_name}
                   </p>
                   <p className="mt-1 font-mono text-xs text-brand-muted">
@@ -320,7 +320,7 @@ export function ProfileOverview({ details, preferences }: ProfileOverviewProps) 
                           href={externalHref(item.github_url)}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-brand-violet hover:underline"
+                          className="inline-flex items-center gap-1 text-brand-primary hover:underline"
                         >
                           GitHub <ExternalLink className="size-3.5" aria-hidden="true" />
                         </a>
@@ -330,7 +330,7 @@ export function ProfileOverview({ details, preferences }: ProfileOverviewProps) 
                           href={externalHref(item.deployed_url)}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-brand-violet hover:underline"
+                          className="inline-flex items-center gap-1 text-brand-primary hover:underline"
                         >
                           Live <ExternalLink className="size-3.5" aria-hidden="true" />
                         </a>

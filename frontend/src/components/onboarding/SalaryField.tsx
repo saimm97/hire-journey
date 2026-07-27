@@ -36,7 +36,7 @@ export function SalaryField({ value, onChange }: SalaryFieldProps) {
           onChange={(event) =>
             onChange(event.target.value === "" ? null : Number(event.target.value))
           }
-          className="h-11 w-full rounded-lg border border-brand-border bg-white py-2 pl-7 pr-3 font-mono text-sm text-brand-ink outline-none transition-all placeholder:text-brand-muted/60 focus:border-brand-violet focus:ring-2 focus:ring-brand-violet/20"
+          className="h-11 w-full rounded-lg border border-brand-border bg-white py-2 pl-7 pr-3 font-mono text-sm text-brand-ink outline-none transition-all placeholder:text-brand-muted/60 focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20"
         />
       </div>
       <p className="text-sm text-brand-muted">

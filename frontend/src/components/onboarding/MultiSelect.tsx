@@ -69,7 +69,7 @@ export function MultiSelect({
             aria-label={addLabel}
             className={cn(
               "h-11 w-full rounded-lg border border-brand-border bg-white py-2 pr-3 text-brand-ink outline-none transition-all",
-              "placeholder:text-brand-muted/60 focus:border-brand-violet focus:ring-2 focus:ring-brand-violet/20",
+              "placeholder:text-brand-muted/60 focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20",
               Icon ? "pl-9" : "pl-3",
             )}
           />
@@ -88,7 +88,7 @@ export function MultiSelect({
               key={option}
               type="button"
               onClick={() => onAdd(option)}
-              className="inline-flex items-center gap-1 rounded-full border border-brand-border bg-white px-3 py-1 text-sm text-brand-muted transition-colors hover:border-brand-violet/60 hover:text-brand-ink"
+              className="inline-flex items-center gap-1 rounded-full border border-brand-border bg-white px-3 py-1 text-sm text-brand-muted transition-colors hover:border-brand-primary/60 hover:text-brand-ink"
             >
               <Plus className="size-3.5" /> {option}
             </button>

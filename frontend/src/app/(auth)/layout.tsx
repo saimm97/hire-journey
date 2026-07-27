@@ -37,7 +37,7 @@ function ProductJourney() {
     <ol className="mt-10 space-y-6" aria-label="How Hire Journey works">
       {JOURNEY.map(({ label, description, icon: Icon }) => (
         <li key={label} className="flex gap-4">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-brand-border bg-white text-brand-violet">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-brand-border bg-white text-brand-primary">
             <Icon className="h-5 w-5" aria-hidden="true" />
           </span>
           <div>
@@ -60,7 +60,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       className={cn(
         'flex-1 border-b pb-3 text-center text-base font-semibold transition-colors',
         active
-          ? 'border-brand-violet text-brand-violet'
+          ? 'border-brand-primary text-brand-primary'
           : 'border-brand-border text-brand-muted hover:border-brand-muted hover:text-brand-ink',
       )}
       aria-current={active ? 'page' : undefined}
@@ -73,13 +73,13 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     <GoogleOAuthProvider clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!}>
       <div className="flex min-h-screen w-full bg-white">
         <aside className="hidden w-[55%] flex-col justify-between border-r border-brand-border bg-brand-paper p-12 lg:flex xl:p-16">
-          <div className="flex items-center gap-2 text-2xl font-semibold text-brand-violet">
+          <div className="flex items-center gap-2 text-2xl font-semibold text-brand-primary">
             <Footprints className="h-6 w-6" aria-hidden="true" />
             Hire Journey
           </div>
 
           <div className="my-12 max-w-lg">
-            <p className="mb-4 text-sm font-semibold text-brand-violet">A calmer career workspace</p>
+            <p className="mb-4 text-sm font-semibold text-brand-primary">A calmer career workspace</p>
             <h1 className="text-4xl font-semibold leading-tight tracking-tight text-brand-ink xl:text-5xl">
               A clearer path through your job search.
             </h1>
@@ -97,7 +97,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
         <main className="flex min-h-screen w-full items-center justify-center overflow-y-auto bg-white p-6 md:p-12 lg:w-[45%]">
           <div className="w-full max-w-md py-8">
-            <div className="mb-8 flex items-center gap-2 text-2xl font-semibold text-brand-violet lg:hidden">
+            <div className="mb-8 flex items-center gap-2 text-2xl font-semibold text-brand-primary lg:hidden">
               <Footprints className="h-6 w-6" aria-hidden="true" />
               Hire Journey
             </div>

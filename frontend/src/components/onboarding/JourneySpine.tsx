@@ -37,7 +37,7 @@ export function JourneySpine({ current, completed = [] }: JourneySpineProps) {
                 className={cn(
                   "flex size-8 shrink-0 items-center justify-center rounded-full border text-sm font-semibold",
                   done && "border-brand-emerald bg-brand-emerald text-white",
-                  active && "border-brand-violet bg-brand-violet text-white",
+                  active && "border-brand-primary bg-brand-primary text-white",
                   !done && !active && "border-brand-border bg-brand-surface text-brand-muted",
                 )}
                 aria-hidden="true"
@@ -48,7 +48,7 @@ export function JourneySpine({ current, completed = [] }: JourneySpineProps) {
                 className={cn(
                   "break-words text-xs font-medium sm:text-sm",
                   done && "text-brand-emerald",
-                  active && "font-semibold text-brand-violet",
+                  active && "font-semibold text-brand-primary",
                   !done && !active && "text-brand-muted",
                 )}
               >

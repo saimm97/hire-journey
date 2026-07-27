@@ -48,8 +48,8 @@ export function ResumeDropzone({ onFile, parsing }: ResumeDropzoneProps) {
       }}
       className={cn(
         "flex cursor-pointer flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed bg-white p-8 text-center transition-colors sm:p-12",
-        "focus-visible:border-brand-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-violet/40",
-        dragging ? "border-brand-violet bg-brand-violet/5" : "border-brand-border hover:border-brand-violet/60",
+        "focus-visible:border-brand-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/40",
+        dragging ? "border-brand-primary bg-brand-primary/5" : "border-brand-border hover:border-brand-primary/60",
       )}
     >
       <input
@@ -65,7 +65,7 @@ export function ResumeDropzone({ onFile, parsing }: ResumeDropzoneProps) {
           event.currentTarget.value = ""
         }}
       />
-      <div className="flex size-16 items-center justify-center rounded-full bg-brand-violet/10 text-brand-violet">
+      <div className="flex size-16 items-center justify-center rounded-full bg-brand-primary/10 text-brand-primary">
         {parsing ? <Loader2 className="size-8 animate-spin" /> : <UploadCloud className="size-8" />}
       </div>
       <div className="space-y-1">
@@ -79,7 +79,7 @@ export function ResumeDropzone({ onFile, parsing }: ResumeDropzoneProps) {
         </p>
       </div>
       {!parsing && (
-        <span className="rounded-lg bg-brand-violet px-5 py-2.5 font-semibold text-white transition-colors hover:bg-brand-violet-dark">
+        <span className="rounded-lg bg-brand-primary px-5 py-2.5 font-semibold text-white transition-colors hover:bg-brand-primary-hover">
           Upload resume
         </span>
       )}

@@ -50,7 +50,7 @@ export function Field({
       <div
         className={cn(
           "flex min-h-11 flex-col justify-center rounded-lg border border-brand-border bg-white px-3 py-2 transition-all",
-          "focus-within:border-brand-violet focus-within:ring-2 focus-within:ring-brand-violet/20",
+          "focus-within:border-brand-primary focus-within:ring-2 focus-within:ring-brand-primary/20",
           error &&
             "border-red-500 focus-within:border-red-500 focus-within:ring-red-500/20",
         )}

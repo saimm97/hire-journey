@@ -16,7 +16,7 @@ This document defines the default visual rules for new and existing screens.
    gradients, shadows, animation, or illustration.
 2. **Truthful state.** Progress and success styling must reflect known product
    state. Loading and unresolved errors must not imply completion.
-3. **One clear next action.** A screen should have one primary indigo action.
+3. **One clear next action.** A screen should have one primary blue action.
    Secondary and reversible actions are visually quieter.
 4. **Editable and recoverable.** Forms keep errors beside the relevant field,
    preserve safe user input, and expose a recovery action when one exists.
@@ -53,12 +53,12 @@ case is the default for headings, navigation, labels, and actions.
 | Ink | `#172033` | Primary text |
 | Muted text | `#64748B` | Supporting text and inactive state |
 | Border | `#E2E8F0` | Dividers and control outlines |
-| Primary | `#4F46E5` | Primary actions and active state |
-| Primary hover | `#4338CA` | Primary hover state |
+| Primary | `#2563EB` | Primary actions and active state |
+| Primary hover | `#1D4ED8` | Primary hover state |
 | Success | `#047857` | Confirmed completion and success feedback |
 | Error | `#B42318` | Validation and destructive actions |
 
-Coral is a limited marketing accent. It must not compete with indigo for primary
+Coral is a limited marketing accent. It must not compete with blue for primary
 application actions or represent product state.
 
 ## Surfaces and spacing
@@ -75,7 +75,7 @@ application actions or represent product state.
 
 The shared `Button` variants are authoritative for ordinary actions:
 
-- `default`: the single primary indigo action;
+- `default`: the single primary blue action;
 - `outline`: secondary or alternative actions;
 - `ghost`: low-emphasis navigation and utility actions; and
 - `destructive`: actions with destructive consequences.
