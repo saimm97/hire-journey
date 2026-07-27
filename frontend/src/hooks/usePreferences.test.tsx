@@ -91,6 +91,22 @@ describe('usePreferences', () => {
     expect(savePreferencesMock).not.toHaveBeenCalled()
   })
 
+  it('clears stale validation errors when saved preferences are reloaded', async () => {
+    getOnboardingMock.mockResolvedValue(makeSnapshot())
+    const { result } = renderHook(() => usePreferences({ guardCompleted: false }))
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+
+    await act(async () => {
+      await result.current.save()
+    })
+    expect(result.current.fieldErrors.desired_roles).toBeDefined()
+
+    act(() => result.current.retry())
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+
+    expect(result.current.fieldErrors).toEqual({})
+  })
+
   it('sends the exact preferences payload and reports completion', async () => {
     getOnboardingMock.mockResolvedValue(makeSnapshot())
     savePreferencesMock.mockResolvedValue(makeSnapshot({ onboarding_complete: true }))

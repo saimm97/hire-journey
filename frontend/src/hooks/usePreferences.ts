@@ -113,6 +113,7 @@ export function usePreferences({
             : null,
         )
         setMinimumSalary(profile.minimum_salary)
+        setFieldErrors({})
         setStatus("ready")
       } catch (error) {
         if (!active) return

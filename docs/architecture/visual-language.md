@@ -121,6 +121,20 @@ date precision controls, same-file resume retry, stale-project recovery, and the
 sticky save footer are functional requirements. Visual changes must preserve
 their field paths, ARIA relationships, and state transitions.
 
+## Post-onboarding profile
+
+The permanent Profile page is read-first. It presents identity, experience,
+education, certifications, projects, skills, and job preferences as one
+scannable professional record. A single **Edit profile** action opens the
+existing hardened detail and preference forms; onboarding itself remains
+always editable and is not routed through this presentation.
+
+The profile editor has one save action. Details are validated and saved before
+preferences, and any failure keeps the editor open with its existing inline
+errors and recovery controls. Cancel dismisses transient feedback and reloads
+both aggregates from the server so unsaved values are never presented as saved
+profile data.
+
 ## Review checklist
 
 Before merging a new screen or visual change, verify:
