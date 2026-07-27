@@ -20,9 +20,14 @@ export default function OnboardingProfile() {
     if (state.redirectTo) router.replace(state.redirectTo)
   }, [state.redirectTo, router])
 
+  const ready = state.status === 'ready'
+  const acceptingResume = state.status === 'empty' || state.status === 'parsing'
+  const currentStep = ready ? 'Profile' : acceptingResume ? 'Resume' : null
+
   return (
     <OnboardingShell
-      step="Profile"
+      step={currentStep}
+      completedSteps={ready ? ['Resume'] : []}
       title="Build your profile"
       subtitle="Upload your resume — we'll read it and fill everything in. You can fix anything."
     >
@@ -34,11 +39,11 @@ export default function OnboardingProfile() {
       {state.status === 'load_error' && (
         <OnboardingLoadError message={state.loadError} onRetry={state.retry} />
       )}
-      {(state.status === 'empty' || state.status === 'parsing') && (
+      {acceptingResume && (
         <ResumeDropzone onFile={state.uploadCv} parsing={state.status === 'parsing'} />
       )}
-      {state.status === 'ready' && <ProfileForm state={state} />}
-      {state.status === 'ready' && (
+      {ready && <ProfileForm state={state} />}
+      {ready && (
         <WizardFooter
           note="Preferences are up next — you can edit all of this later."
           saving={state.saving}

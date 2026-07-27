@@ -68,7 +68,7 @@ export function MultiSelect({
             list={listId}
             aria-label={addLabel}
             className={cn(
-              "w-full rounded-lg border border-brand-border bg-white py-2 pr-3 text-brand-ink outline-none transition-all",
+              "h-11 w-full rounded-lg border border-brand-border bg-white py-2 pr-3 text-brand-ink outline-none transition-all",
               "placeholder:text-brand-muted/60 focus:border-brand-violet focus:ring-2 focus:ring-brand-violet/20",
               Icon ? "pl-9" : "pl-3",
             )}

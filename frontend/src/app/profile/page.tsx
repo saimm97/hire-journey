@@ -4,18 +4,15 @@ import { useEffect } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
+import { AppShell } from '@/components/layout/AppShell'
 import { OnboardingLoadError } from '@/components/onboarding/OnboardingLoadError'
 import { PreferencesForm } from '@/components/onboarding/PreferencesForm'
 import { ProfileForm } from '@/components/onboarding/ProfileForm'
 import { ResumeDropzone } from '@/components/onboarding/ResumeDropzone'
 import { Toast } from '@/components/onboarding/Toast'
-import { AppShell } from '@/components/layout/AppShell'
+import { Button } from '@/components/ui/button'
 import { useOnboardingProfile } from '@/hooks/useOnboardingProfile'
 import { usePreferences } from '@/hooks/usePreferences'
-
-const SAVE_BUTTON =
-  'inline-flex items-center gap-2 rounded-full bg-brand-coral px-6 py-2.5 font-semibold ' +
-  'text-white shadow-sm transition-colors hover:bg-brand-coral-dark disabled:opacity-60'
 
 /** Post-onboarding profile editor: the full details + preferences, always editable. */
 export default function ProfilePage() {
@@ -37,7 +34,9 @@ export default function ProfilePage() {
   return (
     <AppShell>
       <div className="mb-8 space-y-1">
-        <h1 className="text-3xl font-semibold tracking-tight text-brand-ink">Your profile</h1>
+        <h1 className="text-[32px] font-semibold leading-10 tracking-tight text-brand-ink">
+          Your profile
+        </h1>
         <p className="text-brand-muted">
           Everything below feeds your job matching — keep it current.
         </p>
@@ -59,15 +58,15 @@ export default function ProfilePage() {
           <section className="space-y-4">
             <ProfileForm state={details} />
             <div className="flex justify-end">
-              <button
+              <Button
                 type="button"
                 onClick={details.saveAndContinue}
                 disabled={details.saving}
-                className={SAVE_BUTTON}
+                size="lg"
               >
                 {details.saving && <Loader2 className="size-4 animate-spin" />}
                 Save details
-              </button>
+              </Button>
             </div>
           </section>
         )}
@@ -77,20 +76,18 @@ export default function ProfilePage() {
         )}
         {preferences.status === 'ready' && (
           <section className="space-y-4">
-            <h2 className="text-sm font-medium text-brand-muted">
-              Job preferences
-            </h2>
+            <h2 className="text-xl font-semibold text-brand-ink">Job preferences</h2>
             <PreferencesForm state={preferences} />
             <div className="flex justify-end">
-              <button
+              <Button
                 type="button"
                 onClick={preferences.save}
                 disabled={preferences.saving}
-                className={SAVE_BUTTON}
+                size="lg"
               >
                 {preferences.saving && <Loader2 className="size-4 animate-spin" />}
                 Save preferences
-              </button>
+              </Button>
             </div>
           </section>
         )}

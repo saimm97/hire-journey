@@ -20,9 +20,12 @@ export default function OnboardingPreferences() {
     if (state.redirectTo) router.replace(state.redirectTo)
   }, [state.redirectTo, router])
 
+  const ready = state.status === 'ready'
+
   return (
     <OnboardingShell
-      step="Preferences"
+      step={ready ? 'Preferences' : null}
+      completedSteps={ready ? ['Resume', 'Profile'] : []}
       title="What are you looking for?"
       subtitle="Tell us your target roles and terms — this drives your job matches."
     >
@@ -34,8 +37,8 @@ export default function OnboardingPreferences() {
       {state.status === 'load_error' && (
         <OnboardingLoadError message={state.loadError} onRetry={state.retry} />
       )}
-      {state.status === 'ready' && <PreferencesForm state={state} />}
-      {state.status === 'ready' && (
+      {ready && <PreferencesForm state={state} />}
+      {ready && (
         <WizardFooter
           label="Finish setup"
           note="You can change these anytime."

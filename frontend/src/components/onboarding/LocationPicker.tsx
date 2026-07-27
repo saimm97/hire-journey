@@ -4,8 +4,10 @@ import { useState } from "react"
 import { City, Country, State } from "country-state-city"
 import { Plus } from "lucide-react"
 
+import { Button } from "@/components/ui/button"
+
 const SELECT =
-  "w-full rounded-lg border border-brand-border bg-white px-3 py-2 text-sm text-brand-ink " +
+  "h-11 w-full rounded-lg border border-brand-border bg-white px-3 py-2 text-sm text-brand-ink " +
   "outline-none transition-all focus:border-brand-violet focus:ring-2 focus:ring-brand-violet/20"
 
 interface LocationPickerProps {
@@ -93,14 +95,14 @@ export default function LocationPicker({ onSelect, buttonLabel = "Add" }: Locati
         </select>
       )}
 
-      <button
+      <Button
         type="button"
         onClick={commit}
         disabled={!country}
-        className="inline-flex items-center gap-1 rounded-full border border-brand-border bg-white px-3 py-1.5 text-sm text-brand-muted transition-colors hover:border-brand-violet/60 hover:text-brand-ink disabled:opacity-50"
+        variant="outline"
       >
         <Plus className="size-4" /> {buttonLabel}
-      </button>
+      </Button>
     </div>
   )
 }

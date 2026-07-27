@@ -3,6 +3,7 @@
 import { FileCheck2, Loader2, RefreshCw } from "lucide-react"
 
 import type { OnboardingProfileState } from "@/hooks/useOnboardingProfile"
+import { Button } from "@/components/ui/button"
 import { AutoFilledBadge } from "./AutoFilledBadge"
 import { CertificationEditor } from "./CertificationEditor"
 import { ChipInput } from "./ChipInput"
@@ -17,20 +18,21 @@ import { Section } from "./Section"
 /** The complete, editable details step — every extracted section in one form. */
 export function ProfileForm({ state }: { state: OnboardingProfileState }) {
   return (
-    <div className="space-y-10 rounded-2xl border border-brand-border bg-white p-6 shadow-[0_4px_20px_rgba(35,31,28,0.04)] sm:p-8">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-brand-border pb-4">
+    <div className="divide-y divide-brand-border rounded-xl border border-brand-border bg-white px-6 sm:px-8">
+      <div className="flex flex-wrap items-center justify-between gap-3 py-6">
         <div className="flex items-center gap-2">
           <FileCheck2 className="size-5 text-brand-emerald" />
           <span className="font-medium text-brand-ink">Resume parsed</span>
           <AutoFilledBadge label="Everything below is editable" />
         </div>
-        <button
+        <Button
           type="button"
           onClick={state.reupload}
-          className="inline-flex items-center gap-1.5 rounded-full border border-brand-border px-3 py-1.5 text-sm text-brand-muted transition-colors hover:border-brand-violet/60 hover:text-brand-ink"
+          variant="outline"
+          size="sm"
         >
           <RefreshCw className="size-3.5" /> Upload a different resume
-        </button>
+        </Button>
       </div>
 
       <Section title="Your details">
@@ -94,11 +96,13 @@ export function ProfileForm({ state }: { state: OnboardingProfileState }) {
         error={state.projectConflict ?? state.fieldError("projects")}
         action={
           state.projectConflict ? (
-            <button
+            <Button
               type="button"
               onClick={() => void state.reloadProjects()}
               disabled={state.reloadingProjects}
-              className="inline-flex items-center gap-1.5 rounded-full border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:border-red-500 disabled:cursor-wait disabled:opacity-60"
+              variant="outline"
+              size="sm"
+              className="border-red-300 text-red-700 hover:border-red-500 hover:bg-red-50 hover:text-red-700 disabled:cursor-wait"
             >
               {state.reloadingProjects ? (
                 <Loader2 className="size-3.5 animate-spin" />
@@ -106,7 +110,7 @@ export function ProfileForm({ state }: { state: OnboardingProfileState }) {
                 <RefreshCw className="size-3.5" />
               )}
               {state.reloadingProjects ? "Reloading projects…" : "Reload latest projects"}
-            </button>
+            </Button>
           ) : undefined
         }
       >

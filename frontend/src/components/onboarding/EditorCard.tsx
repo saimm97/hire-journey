@@ -3,6 +3,7 @@
 import { useId, type ReactNode } from "react"
 import { Plus, Trash2 } from "lucide-react"
 
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 /** Card frame for one repeatable-section entry, with its remove control. */
@@ -27,7 +28,7 @@ export function EditorCard({
       aria-invalid={error ? true : undefined}
       aria-describedby={errorId}
       className={cn(
-        "relative space-y-3 rounded-xl border border-brand-border bg-white p-4",
+        "relative space-y-3 rounded-lg border border-brand-border bg-brand-paper p-4",
         error && "border-red-500",
       )}
     >
@@ -52,12 +53,14 @@ export function EditorCard({
 /** Dashed add-row button shared by every repeatable editor. */
 export function AddItemButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button
+    <Button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-1 rounded-lg border border-dashed border-brand-border px-3 py-2 text-sm text-brand-muted transition-colors hover:border-brand-violet/60 hover:text-brand-ink"
+      variant="outline"
+      size="sm"
+      className="border-dashed"
     >
       <Plus className="size-4" /> {label}
-    </button>
+    </Button>
   )
 }

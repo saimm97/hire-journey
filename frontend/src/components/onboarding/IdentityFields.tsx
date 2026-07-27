@@ -85,7 +85,7 @@ export function IdentityFields({
       <Field
         label="Account email"
         badge={<Lock className="size-3 text-brand-muted" />}
-        className="bg-brand-surface sm:col-span-2"
+        className="sm:col-span-2"
       >
         <p className="text-base text-brand-muted">{accountEmail}</p>
       </Field>

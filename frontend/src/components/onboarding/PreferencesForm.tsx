@@ -56,9 +56,9 @@ export function PreferencesForm({ state }: { state: PreferencesState }) {
   )
 
   return (
-    <div className="space-y-10 rounded-2xl border border-brand-border bg-white p-6 shadow-[0_4px_20px_rgba(35,31,28,0.04)] sm:p-8">
+    <div className="divide-y divide-brand-border rounded-xl border border-brand-border bg-white px-6 sm:px-8">
       {unmapped.length > 0 && (
-        <div className="rounded-lg border border-red-500 bg-red-50 p-3 text-sm text-red-700">
+        <div className="my-6 rounded-lg border border-red-500 bg-red-50 p-4 text-sm text-red-700">
           <p className="font-medium">Please fix the following:</p>
           <ul className="mt-1 list-inside list-disc">
             {unmapped.map(([key, message]) => (

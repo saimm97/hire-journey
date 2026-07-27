@@ -47,7 +47,7 @@ export function ResumeDropzone({ onFile, parsing }: ResumeDropzoneProps) {
         if (!parsing) pick(event.dataTransfer.files)
       }}
       className={cn(
-        "flex cursor-pointer flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed bg-white p-12 text-center shadow-[0_4px_20px_rgba(35,31,28,0.04)] transition-colors",
+        "flex cursor-pointer flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed bg-white p-8 text-center transition-colors sm:p-12",
         "focus-visible:border-brand-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-violet/40",
         dragging ? "border-brand-violet bg-brand-violet/5" : "border-brand-border hover:border-brand-violet/60",
       )}
@@ -79,11 +79,11 @@ export function ResumeDropzone({ onFile, parsing }: ResumeDropzoneProps) {
         </p>
       </div>
       {!parsing && (
-        <span className="rounded-full bg-brand-coral px-5 py-2.5 font-semibold text-white shadow-sm transition-colors hover:bg-brand-coral-dark">
+        <span className="rounded-lg bg-brand-violet px-5 py-2.5 font-semibold text-white transition-colors hover:bg-brand-violet-dark">
           Upload resume
         </span>
       )}
-      <span className="font-mono text-[11px] uppercase tracking-wide text-brand-muted">
+      <span className="text-xs text-brand-muted">
         PDF, DOCX up to 5MB
       </span>
     </div>
