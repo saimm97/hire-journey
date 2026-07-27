@@ -24,7 +24,7 @@ export function Section({ title, action, fieldPath, error, children }: SectionPr
       <div className="flex items-center justify-between">
         <h3
           className={cn(
-            "font-mono text-[11px] uppercase tracking-wider text-brand-muted",
+            "text-xl font-semibold leading-7 tracking-tight text-brand-ink",
             error && "text-red-600",
           )}
         >

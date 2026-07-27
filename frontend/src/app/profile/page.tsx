@@ -37,7 +37,7 @@ export default function ProfilePage() {
   return (
     <AppShell>
       <div className="mb-8 space-y-1">
-        <h1 className="font-display text-3xl font-semibold text-brand-ink">Your profile</h1>
+        <h1 className="text-3xl font-semibold tracking-tight text-brand-ink">Your profile</h1>
         <p className="text-brand-muted">
           Everything below feeds your job matching — keep it current.
         </p>
@@ -77,7 +77,7 @@ export default function ProfilePage() {
         )}
         {preferences.status === 'ready' && (
           <section className="space-y-4">
-            <h2 className="font-mono text-[11px] uppercase tracking-wider text-brand-muted">
+            <h2 className="text-sm font-medium text-brand-muted">
               Job preferences
             </h2>
             <PreferencesForm state={preferences} />

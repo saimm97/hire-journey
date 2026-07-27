@@ -26,7 +26,7 @@ export function JourneySpine({ current = "Profile" }: { current?: Milestone }) {
               />
               <span
                 className={cn(
-                  "font-mono text-[11px] tracking-wide",
+                  "text-sm font-medium",
                   active ? "font-bold text-brand-ink" : "text-brand-muted",
                   !active && !done && "opacity-60",
                 )}

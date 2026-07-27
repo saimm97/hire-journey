@@ -26,7 +26,7 @@ export function WizardFooter({
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-1 rounded px-3 py-1.5 font-mono text-[11px] uppercase tracking-wide text-brand-muted hover:text-brand-ink"
+          className="inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium text-brand-muted hover:bg-white hover:text-brand-ink"
         >
           <ArrowLeft className="size-4" /> Back
         </button>

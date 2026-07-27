@@ -50,8 +50,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen bg-brand-paper">
       <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r border-brand-border bg-brand-surface px-4 py-6">
         <div className="px-2">
-          <p className="font-display text-lg font-semibold text-brand-violet">Hire Journey</p>
-          <p className="font-mono text-[10px] uppercase tracking-widest text-brand-muted">
+          <p className="text-lg font-semibold tracking-tight text-brand-violet">Hire Journey</p>
+          <p className="text-xs font-medium text-brand-muted">
             AI Copilot
           </p>
         </div>
@@ -93,7 +93,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="mt-auto flex items-center gap-3 border-t border-brand-border px-2 pt-4">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-violet/10 font-display font-semibold text-brand-violet">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-violet/10 font-semibold text-brand-violet">
             {user?.username?.[0]?.toUpperCase() ?? "?"}
           </span>
           <span className="min-w-0 flex-1">

@@ -1,30 +1,26 @@
-import type { Metadata } from "next";
-import { Bricolage_Grotesque, Geist, Geist_Mono, Inter } from "next/font/google";
-import "./globals.css";
-import { AuthProvider } from "@/lib/auth/AuthContext";
-import { cn } from "@/lib/utils";
+import type { Metadata } from 'next'
+import { Geist, Geist_Mono } from 'next/font/google'
 
-const inter = Inter({subsets:['latin'],variable:'--font-sans'});
+import { AuthProvider } from '@/lib/auth/AuthContext'
 
-const bricolage = Bricolage_Grotesque({
-  subsets: ["latin"],
-  variable: "--font-bricolage",
-});
+import './globals.css'
 
 const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+  variable: '--font-geist-sans',
+  subsets: ['latin'],
+  display: 'swap',
+})
 
 const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+  variable: '--font-geist-mono',
+  subsets: ['latin'],
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
-  title: "HireJourney",
-  description: "Your Job-Search Partner",
-};
+  title: 'HireJourney',
+  description: 'Your Job-Search Partner',
+}
 
 export default function RootLayout({
   children,
@@ -32,13 +28,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={cn("h-full", "antialiased", geistSans.variable, geistMono.variable, bricolage.variable, "font-sans", inter.variable)}
-    >
-      <body className="min-h-full flex flex-col">
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+      <body className="flex min-h-full flex-col font-sans">
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
-  );
+  )
 }

@@ -25,7 +25,7 @@ export function Field({
   children,
 }: FieldProps) {
   const labelClassName = cn(
-    "font-mono text-[11px] uppercase tracking-wide text-brand-muted",
+    "text-sm font-medium leading-5 text-brand-ink",
     error && "text-red-600",
   )
 

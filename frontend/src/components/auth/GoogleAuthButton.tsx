@@ -34,7 +34,7 @@ export function GoogleAuthButton() {
     <div>
       <div className="my-6 flex items-center gap-4">
         <div className="h-px flex-1 bg-brand-border" />
-        <span className="font-mono text-xs text-brand-muted">OR</span>
+        <span className="text-xs font-medium text-brand-muted">or</span>
         <div className="h-px flex-1 bg-brand-border" />
       </div>
 

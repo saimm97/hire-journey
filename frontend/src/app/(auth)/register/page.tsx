@@ -37,7 +37,7 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>
 
-const LABEL = 'font-mono text-[11px] uppercase tracking-wide text-brand-muted'
+const LABEL = 'text-sm font-medium leading-5 text-brand-ink'
 const FIELD =
   'h-11 rounded-lg border-brand-border bg-white shadow-sm placeholder:text-brand-muted/60 focus-visible:border-brand-violet focus-visible:ring-2 focus-visible:ring-brand-violet/25'
 

@@ -19,7 +19,7 @@ export function OnboardingLoadError({ message, onRetry }: OnboardingLoadErrorPro
         <AlertTriangle className="size-7" />
       </div>
       <div className="space-y-1">
-        <h3 className="font-display text-xl font-semibold text-brand-ink">
+        <h3 className="text-xl font-semibold tracking-tight text-brand-ink">
           We couldn&apos;t load your details
         </h3>
         <p className="text-brand-muted">

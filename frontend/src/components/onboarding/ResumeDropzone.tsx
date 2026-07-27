@@ -69,7 +69,7 @@ export function ResumeDropzone({ onFile, parsing }: ResumeDropzoneProps) {
         {parsing ? <Loader2 className="size-8 animate-spin" /> : <UploadCloud className="size-8" />}
       </div>
       <div className="space-y-1">
-        <h3 className="font-display text-2xl font-semibold text-brand-ink">
+        <h3 className="text-2xl font-semibold tracking-tight text-brand-ink">
           {parsing ? "Reading your resume…" : "Drop your resume to get started"}
         </h3>
         <p className="text-brand-muted">

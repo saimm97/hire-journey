@@ -17,8 +17,8 @@ export function OnboardingShell({ step, title, subtitle, children }: OnboardingS
     <div className="min-h-screen bg-brand-paper">
       <header className="border-b border-brand-border bg-white px-6 py-4">
         <div className="mx-auto flex max-w-5xl items-center justify-between">
-          <span className="font-display text-lg font-semibold text-brand-ink">Hire Journey</span>
-          <span className="font-mono text-[11px] uppercase tracking-wide text-brand-muted">
+          <span className="text-lg font-semibold tracking-tight text-brand-ink">Hire Journey</span>
+          <span className="text-xs font-medium text-brand-muted">
             Onboarding
           </span>
         </div>
@@ -26,7 +26,7 @@ export function OnboardingShell({ step, title, subtitle, children }: OnboardingS
       <JourneySpine current={step} />
       <main className="mx-auto max-w-5xl px-6 py-10 pb-32">
         <div className="mb-8 space-y-1">
-          <h1 className="font-display text-3xl font-semibold text-brand-ink">{title}</h1>
+          <h1 className="text-3xl font-semibold tracking-tight text-brand-ink">{title}</h1>
           <p className="text-brand-muted">{subtitle}</p>
         </div>
         {children}

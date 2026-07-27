@@ -38,7 +38,7 @@ export default function Home() {
   return (
     <div className="flex flex-1 items-center justify-center bg-brand-paper p-6">
       <div className="w-full max-w-md rounded-2xl border border-brand-border bg-white p-8 shadow-sm">
-        <h1 className="font-display text-3xl font-bold text-brand-ink">
+        <h1 className="text-3xl font-semibold tracking-tight text-brand-ink">
           Welcome back, {user.username}
         </h1>
         <p className="mt-2 text-brand-muted">{user.email}</p>
