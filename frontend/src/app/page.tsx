@@ -37,15 +37,12 @@ export default function Home() {
 
   return (
     <div className="flex flex-1 items-center justify-center bg-brand-paper p-6">
-      <div className="w-full max-w-md rounded-2xl border border-brand-border bg-white p-8 shadow-sm">
-        <h1 className="text-3xl font-semibold tracking-tight text-brand-ink">
+      <div className="w-full max-w-md rounded-xl border border-brand-border bg-white p-8">
+        <h1 className="text-[32px] font-semibold leading-10 tracking-tight text-brand-ink">
           Welcome back, {user.username}
         </h1>
         <p className="mt-2 text-brand-muted">{user.email}</p>
-        <Button
-          onClick={handleLogout}
-          className="mt-8 h-11 rounded-full bg-brand-violet font-semibold text-white hover:bg-brand-violet-dark"
-        >
+        <Button onClick={handleLogout} size="lg" className="mt-8">
           <LogOut className="h-4 w-4" />
           Log out
         </Button>
