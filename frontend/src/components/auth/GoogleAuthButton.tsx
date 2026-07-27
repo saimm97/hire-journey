@@ -44,9 +44,9 @@ export function GoogleAuthButton() {
           onError={() => console.error('Google login failed')}
           theme="outline"
           size="large"
-          shape="pill"
+          shape="rectangular"
           text="continue_with"
-          width="384"
+          width="320"
         />
       </div>
     </div>

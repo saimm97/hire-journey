@@ -39,7 +39,7 @@ type FormValues = z.infer<typeof schema>
 
 const LABEL = 'text-sm font-medium leading-5 text-brand-ink'
 const FIELD =
-  'h-11 rounded-lg border-brand-border bg-white shadow-sm placeholder:text-brand-muted/60 focus-visible:border-brand-violet focus-visible:ring-2 focus-visible:ring-brand-violet/25'
+  'h-11 rounded-lg border-brand-border bg-white placeholder:text-brand-muted/60 focus-visible:border-brand-violet focus-visible:ring-2 focus-visible:ring-brand-violet/25'
 
 function strengthOf(pw: string): number {
   if (!pw) return 0
@@ -146,7 +146,7 @@ export default function Register() {
                       />
                     ))}
                   </div>
-                  <span className="w-8 font-mono text-[11px] text-brand-muted">
+                  <span className="w-8 text-xs text-brand-muted">
                     {strengthLabel}
                   </span>
                 </div>
@@ -162,7 +162,8 @@ export default function Register() {
           <Button
             type="submit"
             disabled={form.formState.isSubmitting}
-            className="mt-1 h-12 w-full rounded-full bg-brand-coral font-semibold text-white shadow-md hover:bg-brand-coral-dark"
+            size="lg"
+            className="mt-1 w-full"
           >
             {form.formState.isSubmitting ? (
               <>
@@ -171,7 +172,7 @@ export default function Register() {
               </>
             ) : (
               <>
-                Start Your Journey
+                Create account
                 <ArrowRight className="h-5 w-5" />
               </>
             )}
