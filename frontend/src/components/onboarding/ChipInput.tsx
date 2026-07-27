@@ -81,7 +81,7 @@ export function ChipInput({
           <div
             className={cn(
               "inline-flex items-center rounded-full border border-brand-border bg-white px-3 py-1",
-              "focus-within:border-brand-violet focus-within:ring-2 focus-within:ring-brand-violet/20",
+              "focus-within:border-brand-primary focus-within:ring-2 focus-within:ring-brand-primary/20",
               error &&
                 "border-red-500 focus-within:border-red-500 focus-within:ring-red-500/20",
             )}
@@ -102,7 +102,7 @@ export function ChipInput({
               type="button"
               onClick={commit}
               aria-label={addLabel}
-              className="flex items-center text-brand-muted hover:text-brand-violet"
+              className="flex items-center text-brand-muted hover:text-brand-primary"
             >
               <Plus className="size-4" />
             </button>
@@ -135,8 +135,8 @@ export function ChipInput({
           aria-describedby={errorId}
           data-field-path={fieldPath}
           className={cn(
-            "w-full rounded-lg border border-brand-border bg-white py-2 pr-3 text-brand-ink outline-none transition-all",
-            "placeholder:text-brand-muted/60 focus:border-brand-violet focus:ring-2 focus:ring-brand-violet/20",
+            "h-11 w-full rounded-lg border border-brand-border bg-white py-2 pr-3 text-brand-ink outline-none transition-all",
+            "placeholder:text-brand-muted/60 focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20",
             error && "border-red-500 focus:border-red-500 focus:ring-red-500/20",
             Icon ? "pl-9" : "pl-3",
           )}

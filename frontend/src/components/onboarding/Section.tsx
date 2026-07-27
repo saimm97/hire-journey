@@ -10,13 +10,16 @@ interface SectionProps {
   children: ReactNode
 }
 
-/** A titled block: a mono uppercase heading with an optional right-aligned action. */
+/** A titled form section with an optional right-aligned action. */
 export function Section({ title, action, fieldPath, error, children }: SectionProps) {
   const errorId = fieldPath && error ? `section-${fieldPath}-error` : undefined
 
   return (
     <section
-      className={cn("space-y-4", error && "rounded-lg border border-red-500 p-3")}
+      className={cn(
+        "space-y-4 py-8",
+        error && "rounded-lg bg-red-50/50 px-4 ring-1 ring-inset ring-red-500",
+      )}
       data-field-path={fieldPath}
       tabIndex={fieldPath ? -1 : undefined}
       aria-describedby={errorId}
@@ -24,7 +27,7 @@ export function Section({ title, action, fieldPath, error, children }: SectionPr
       <div className="flex items-center justify-between">
         <h3
           className={cn(
-            "font-mono text-[11px] uppercase tracking-wider text-brand-muted",
+            "text-xl font-semibold leading-7 tracking-tight text-brand-ink",
             error && "text-red-600",
           )}
         >
@@ -33,7 +36,7 @@ export function Section({ title, action, fieldPath, error, children }: SectionPr
         {action}
       </div>
       {error && (
-        <p id={errorId} className="text-xs text-red-600">
+        <p id={errorId} className="text-sm text-red-600">
           {error}
         </p>
       )}

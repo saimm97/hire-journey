@@ -27,7 +27,7 @@ export function WelcomeBanner() {
 
   return (
     <div className="space-y-3">
-      <h1 className="font-display text-3xl font-semibold text-brand-ink">
+      <h1 className="text-[32px] font-semibold leading-10 tracking-tight text-brand-ink">
         Welcome back{user ? `, ${user.username}` : ""}.
       </h1>
       <p className="max-w-xl text-lg text-brand-muted">{quoteOfTheDay()}</p>

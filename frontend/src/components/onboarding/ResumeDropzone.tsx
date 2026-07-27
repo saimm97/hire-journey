@@ -47,9 +47,9 @@ export function ResumeDropzone({ onFile, parsing }: ResumeDropzoneProps) {
         if (!parsing) pick(event.dataTransfer.files)
       }}
       className={cn(
-        "flex cursor-pointer flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed bg-white p-12 text-center shadow-[0_4px_20px_rgba(35,31,28,0.04)] transition-colors",
-        "focus-visible:border-brand-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-violet/40",
-        dragging ? "border-brand-violet bg-brand-violet/5" : "border-brand-border hover:border-brand-violet/60",
+        "flex cursor-pointer flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed bg-white p-8 text-center transition-colors sm:p-12",
+        "focus-visible:border-brand-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/40",
+        dragging ? "border-brand-primary bg-brand-primary/5" : "border-brand-border hover:border-brand-primary/60",
       )}
     >
       <input
@@ -65,11 +65,11 @@ export function ResumeDropzone({ onFile, parsing }: ResumeDropzoneProps) {
           event.currentTarget.value = ""
         }}
       />
-      <div className="flex size-16 items-center justify-center rounded-full bg-brand-violet/10 text-brand-violet">
+      <div className="flex size-16 items-center justify-center rounded-full bg-brand-primary/10 text-brand-primary">
         {parsing ? <Loader2 className="size-8 animate-spin" /> : <UploadCloud className="size-8" />}
       </div>
       <div className="space-y-1">
-        <h3 className="font-display text-2xl font-semibold text-brand-ink">
+        <h3 className="text-2xl font-semibold tracking-tight text-brand-ink">
           {parsing ? "Reading your resume…" : "Drop your resume to get started"}
         </h3>
         <p className="text-brand-muted">
@@ -79,11 +79,11 @@ export function ResumeDropzone({ onFile, parsing }: ResumeDropzoneProps) {
         </p>
       </div>
       {!parsing && (
-        <span className="rounded-full bg-brand-coral px-5 py-2.5 font-semibold text-white shadow-sm transition-colors hover:bg-brand-coral-dark">
+        <span className="rounded-lg bg-brand-primary px-5 py-2.5 font-semibold text-white transition-colors hover:bg-brand-primary-hover">
           Upload resume
         </span>
       )}
-      <span className="font-mono text-[11px] uppercase tracking-wide text-brand-muted">
+      <span className="text-xs text-brand-muted">
         PDF, DOCX up to 5MB
       </span>
     </div>

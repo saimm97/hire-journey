@@ -72,7 +72,7 @@ export function YearMonthField({
           type="button"
           onClick={switchPrecision}
           aria-label={`${yearOnly ? "Use month picker" : "Use year only"} for ${label}`}
-          className="rounded px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-brand-violet transition-colors hover:bg-brand-violet/10"
+          className="rounded px-1.5 py-0.5 text-xs font-medium text-brand-primary transition-colors hover:bg-brand-primary/10"
         >
           {yearOnly ? "Use month" : "Year only"}
         </button>

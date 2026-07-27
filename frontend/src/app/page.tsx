@@ -19,7 +19,7 @@ export default function Home() {
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center bg-brand-paper">
-        <Loader2 className="h-6 w-6 animate-spin text-brand-violet" />
+        <Loader2 className="h-6 w-6 animate-spin text-brand-primary" />
       </div>
     )
   }
@@ -28,7 +28,7 @@ export default function Home() {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4 bg-brand-paper">
         <p className="text-brand-muted">You&apos;re not signed in.</p>
-        <Link href="/login" className="font-semibold text-brand-violet hover:underline">
+        <Link href="/login" className="font-semibold text-brand-primary hover:underline">
           Go to sign in →
         </Link>
       </div>
@@ -37,15 +37,12 @@ export default function Home() {
 
   return (
     <div className="flex flex-1 items-center justify-center bg-brand-paper p-6">
-      <div className="w-full max-w-md rounded-2xl border border-brand-border bg-white p-8 shadow-sm">
-        <h1 className="font-display text-3xl font-bold text-brand-ink">
+      <div className="w-full max-w-md rounded-xl border border-brand-border bg-white p-8">
+        <h1 className="text-[32px] font-semibold leading-10 tracking-tight text-brand-ink">
           Welcome back, {user.username}
         </h1>
         <p className="mt-2 text-brand-muted">{user.email}</p>
-        <Button
-          onClick={handleLogout}
-          className="mt-8 h-11 rounded-full bg-brand-violet font-semibold text-white hover:bg-brand-violet-dark"
-        >
+        <Button onClick={handleLogout} size="lg" className="mt-8">
           <LogOut className="h-4 w-4" />
           Log out
         </Button>

@@ -20,7 +20,7 @@ export function ResumeSummary({ summary, onChange }: ResumeSummaryProps) {
         onChange={(event) => onChange(event.target.value)}
         rows={4}
         placeholder="Add a short professional summary…"
-        className="w-full resize-none rounded-lg border border-brand-border bg-white p-3 text-base leading-relaxed text-brand-ink outline-none transition-all placeholder:text-brand-muted/60 focus:border-brand-violet focus:ring-2 focus:ring-brand-violet/20"
+        className="w-full resize-none rounded-lg border border-brand-border bg-white p-3 text-base leading-relaxed text-brand-ink outline-none transition-all placeholder:text-brand-muted/60 focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20"
       />
     </Section>
   )

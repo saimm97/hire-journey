@@ -13,7 +13,7 @@ interface FieldProps {
   children: ReactNode
 }
 
-/** A bordered input frame with the label and an optional badge stacked above the control. */
+/** A label and optional badge above a standardized bordered control. */
 export function Field({
   label,
   badge,
@@ -25,7 +25,7 @@ export function Field({
   children,
 }: FieldProps) {
   const labelClassName = cn(
-    "font-mono text-[11px] uppercase tracking-wide text-brand-muted",
+    "text-sm font-medium leading-5 text-brand-ink",
     error && "text-red-600",
   )
 
@@ -35,15 +35,9 @@ export function Field({
       tabIndex={fieldPath ? -1 : undefined}
       aria-invalid={fieldPath && error ? true : undefined}
       aria-describedby={fieldPath && error ? errorId : undefined}
-      className={cn(
-        "rounded-lg border border-brand-border bg-white px-3 py-2 transition-all",
-        "focus-within:border-brand-violet focus-within:ring-2 focus-within:ring-brand-violet/20",
-        error &&
-          "border-red-500 focus-within:border-red-500 focus-within:ring-red-500/20",
-        className,
-      )}
+      className={cn("space-y-1.5", className)}
     >
-      <div className="mb-1 flex items-center justify-between">
+      <div className="flex min-h-5 items-center justify-between gap-2">
         {htmlFor ? (
           <label htmlFor={htmlFor} className={labelClassName}>
             {label}
@@ -53,9 +47,18 @@ export function Field({
         )}
         {badge}
       </div>
-      {children}
+      <div
+        className={cn(
+          "flex min-h-11 flex-col justify-center rounded-lg border border-brand-border bg-white px-3 py-2 transition-all",
+          "focus-within:border-brand-primary focus-within:ring-2 focus-within:ring-brand-primary/20",
+          error &&
+            "border-red-500 focus-within:border-red-500 focus-within:ring-red-500/20",
+        )}
+      >
+        {children}
+      </div>
       {error && (
-        <p id={errorId} className="mt-1 text-xs text-red-600">
+        <p id={errorId} className="text-sm text-red-600">
           {error}
         </p>
       )}

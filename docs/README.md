@@ -12,6 +12,9 @@ with it safely.
   completion, API contracts, and failure recovery.
 - [Current database schema](architecture/database-schema.md) — tables,
   relationships, constraints, ownership, and known limitations.
+- [Visual language](architecture/visual-language.md) — typography, color,
+  surfaces, action hierarchy, responsive navigation, and truthful onboarding
+  progress.
 - [ADR-0001: Profile-centred onboarding schema](adr/0001-profile-centered-onboarding-schema.md)
   — the decisions and tradeoffs behind the July 2026 refactor.
 - [ADR-0002: Resume-first, snapshot-driven onboarding](adr/0002-resume-first-snapshot-onboarding.md)
@@ -29,8 +32,10 @@ Update the relevant documentation in the same pull request when a change:
 - adds, removes, or renames a table, column, relationship, or constraint;
 - changes a business rule or where that rule is enforced;
 - introduces a migration with operational or data-loss consequences;
-- accepts or reverses an architectural decision; or
-- changes the status of an onboarding milestone.
+- accepts or reverses an architectural decision;
+- changes the status of an onboarding milestone; or
+- changes the shared visual tokens, interaction hierarchy, navigation, or
+  progress semantics.
 
 Create a new ADR for a decision that is expensive to reverse or affects more
 than one component. Do not rewrite an accepted ADR to hide history; supersede
