@@ -5,9 +5,10 @@ import { AppShell } from './AppShell'
 
 const replace = vi.fn()
 const logout = vi.fn().mockResolvedValue(undefined)
+let pathname = '/dashboard'
 
 vi.mock('next/navigation', () => ({
-  usePathname: () => '/dashboard',
+  usePathname: () => pathname,
   useRouter: () => ({ replace }),
 }))
 
@@ -22,6 +23,7 @@ vi.mock('@/lib/auth/AuthContext', () => ({
 
 describe('AppShell', () => {
   beforeEach(() => {
+    pathname = '/dashboard'
     replace.mockClear()
     logout.mockClear()
   })
@@ -30,6 +32,7 @@ describe('AppShell', () => {
     render(<AppShell>Workspace</AppShell>)
 
     expect(screen.getAllByRole('link', { name: 'Dashboard' })).toHaveLength(2)
+    expect(screen.getAllByRole('link', { name: 'Jobs' })).toHaveLength(2)
     expect(screen.getAllByRole('link', { name: 'Profile' })).toHaveLength(2)
     expect(screen.queryByText('Search')).not.toBeInTheDocument()
     expect(screen.queryByText('Matches')).not.toBeInTheDocument()
@@ -39,9 +42,10 @@ describe('AppShell', () => {
   })
 
   it('marks the active destination in both navigation variants', () => {
+    pathname = '/jobs'
     render(<AppShell>Workspace</AppShell>)
 
-    for (const link of screen.getAllByRole('link', { name: 'Dashboard' })) {
+    for (const link of screen.getAllByRole('link', { name: 'Jobs' })) {
       expect(link).toHaveAttribute('aria-current', 'page')
     }
   })
