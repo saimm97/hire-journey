@@ -1,62 +1,69 @@
-"""Persist raw fetched jobs to the database.
-
-Handles the primary dedup: the jobs table has a unique constraint on url, so we
-use INSERT ... ON CONFLICT and then SELECT to get the canonical row (whether we
-inserted it now or it already existed from a previous scan).
-
-The jobs table grows incrementally across scans — a job fetched today that was
-already stored last week is not re-inserted; its description is backfilled if
-missing and updated_at reflects the latest sighting.
-"""
+"""Idempotently persist normalized ATS postings using the existing URL key."""
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.company import Company
 from app.models.job import Job
 from app.sources import SOURCES, source_for_url
 from app.sources.base import RawJob
 
+UPSERT_CHUNK_SIZE = 500
+MAX_JOB_TITLE_LENGTH = 500
+MAX_JOB_LOCATION_LENGTH = 255
 
-async def upsert_job(db: AsyncSession, raw: RawJob, company: Company) -> Job | None:
-    """Insert the job if its URL is new, then return the canonical DB row.
 
-    Returns None if the raw job has no URL (malformed ATS response).
-    """
-    if not raw.url:
+def _bounded_text(value: str | None, max_length: int) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned[:max_length] or None
+
+
+def _values_for_job(raw: RawJob, company_id: int) -> dict | None:
+    title = _bounded_text(raw.title, MAX_JOB_TITLE_LENGTH)
+    url = raw.url.strip() if isinstance(raw.url, str) else ""
+    if title is None or not url:
+        return None
+    return {
+        "company_id": company_id,
+        "title": title,
+        "url": url,
+        "location": _bounded_text(raw.location, MAX_JOB_LOCATION_LENGTH),
+        "description": raw.description or None,
+        "posted_at": raw.posted_at,
+        "deadline": raw.deadline,
+        "salary_min": raw.salary_min,
+        "salary_max": raw.salary_max,
+    }
+
+
+async def upsert_job(db: AsyncSession, raw: RawJob, company_id: int) -> Job | None:
+    """Insert or refresh one job, returning its canonical URL-keyed row."""
+    values = _values_for_job(raw, company_id)
+    if values is None:
         return None
 
-    new_desc = raw.description or None
-    stmt = pg_insert(Job).values(
-        company_id=company.id,
-        title=raw.title,
-        url=raw.url,
-        location=raw.location or None,
-        description=new_desc,
-        posted_at=raw.posted_at,
-        deadline=raw.deadline,
-    )
-    # If the job already exists (same URL), backfill fields only where they are
-    # still NULL — COALESCE keeps whatever we already stored. Title and location
-    # are intentionally left unchanged: they come from the same API and won't
-    # drift meaningfully between scans. updated_at is bumped unconditionally so
-    # it records the last time we saw this posting live on the board.
+    stmt = pg_insert(Job).values(values)
     cols = Job.__table__.c
+    excluded = stmt.excluded
     stmt = stmt.on_conflict_do_update(
         index_elements=["url"],
         set_={
-            "description": func.coalesce(cols.description, new_desc),
-            "posted_at": func.coalesce(cols.posted_at, raw.posted_at),
-            "deadline": func.coalesce(cols.deadline, raw.deadline),
+            "title": excluded.title,
+            "description": func.coalesce(excluded.description, cols.description),
+            "location": func.coalesce(excluded.location, cols.location),
+            "posted_at": func.coalesce(excluded.posted_at, cols.posted_at),
+            "deadline": func.coalesce(excluded.deadline, cols.deadline),
+            "salary_min": excluded.salary_min,
+            "salary_max": excluded.salary_max,
             "updated_at": func.now(),
         },
-    )
-    await db.execute(stmt)
-
-    result = await db.execute(select(Job).where(Job.url == raw.url))
-    return result.scalar_one_or_none()
+    ).returning(Job)
+    stmt = stmt.execution_options(populate_existing=True)
+    result = await db.execute(stmt)
+    return result.scalar_one()
 
 
 async def ensure_description(db: AsyncSession, job: Job) -> None:
@@ -96,11 +103,39 @@ async def get_job_with_description(db: AsyncSession, job_id: int) -> Job | None:
     return job
 
 
-async def upsert_jobs(db: AsyncSession, raw_jobs: list[RawJob], company: Company) -> list[Job]:
-    """Upsert a batch of raw jobs for one company. Returns the canonical DB rows."""
-    jobs = []
+async def upsert_jobs(db: AsyncSession, raw_jobs: list[RawJob], company_id: int) -> list[Job]:
+    """Bulk-upsert a company snapshot and return the canonical rows.
+
+    Duplicate or blank URLs are removed before issuing SQL. Chunking keeps the
+    PostgreSQL bind-parameter count bounded for unusually large boards.
+    """
+    unique_jobs: dict[str, dict] = {}
     for raw in raw_jobs:
-        job = await upsert_job(db, raw, company)
-        if job is not None:
-            jobs.append(job)
+        values = _values_for_job(raw, company_id)
+        if values is not None and values["url"] not in unique_jobs:
+            unique_jobs[values["url"]] = values
+
+    raw_values = list(unique_jobs.values())
+    jobs: list[Job] = []
+    for offset in range(0, len(raw_values), UPSERT_CHUNK_SIZE):
+        chunk = raw_values[offset : offset + UPSERT_CHUNK_SIZE]
+        stmt = pg_insert(Job).values(chunk)
+        cols = Job.__table__.c
+        excluded = stmt.excluded
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["url"],
+            set_={
+                "title": excluded.title,
+                "description": func.coalesce(excluded.description, cols.description),
+                "location": func.coalesce(excluded.location, cols.location),
+                "posted_at": func.coalesce(excluded.posted_at, cols.posted_at),
+                "deadline": func.coalesce(excluded.deadline, cols.deadline),
+                "salary_min": excluded.salary_min,
+                "salary_max": excluded.salary_max,
+                "updated_at": func.now(),
+            },
+        ).returning(Job)
+        stmt = stmt.execution_options(populate_existing=True)
+        result = await db.execute(stmt)
+        jobs.extend(result.scalars().all())
     return jobs

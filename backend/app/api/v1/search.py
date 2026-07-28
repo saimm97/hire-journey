@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -12,14 +12,19 @@ router = APIRouter()
 
 @router.post("/run", response_model=SearchRunResponse, status_code=status.HTTP_202_ACCEPTED)
 async def run_scan(
-    db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> SearchRunResponse:
-    """Fetch jobs from every scannable company (all ATS boards tried) and store them.
+    """Fetch every configured ATS feed once and idempotently store its public jobs.
 
     Scores are not persisted — rank stored jobs with GET /results.
     """
-    total = await search_service.run_scan(db)
+    try:
+        total = await search_service.run_scan_locked()
+    except search_service.IngestionAlreadyRunningError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A job-ingestion run is already active.",
+        ) from exc
     return SearchRunResponse(total_jobs_fetched=total)
 
 

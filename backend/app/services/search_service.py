@@ -1,36 +1,90 @@
-"""Job-scan orchestration and on-the-fly result scoring.
+"""ATS ingestion orchestration and on-the-fly result scoring.
 
-run_scan() fetches jobs from every scannable company (all ATS adapters are
-tried per company) and upserts them into the jobs table.
+run_scan() fetches each configured careers URL through its one matching adapter
+and commits every company independently.
 
 get_results() is the read path: it keyword-scores the stored jobs against the
 caller's search terms plus the skills from their most recent resume, entirely
 in memory — no scores are persisted.
 """
 
-from sqlalchemy import select
+import logging
+
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.database import AsyncSessionLocal, engine
 from app.models.job import Job
 from app.schemas.search import JobResult, SearchResultsResponse
 from app.services import company_service, fetch_service, job_service, profile_service, score_service
 
+logger = logging.getLogger(__name__)
+INGESTION_LOCK_ID = 684_731_902
+
+
+class IngestionAlreadyRunningError(RuntimeError):
+    pass
+
 
 async def run_scan(db: AsyncSession) -> int:
-    """Fetch, filter, and upsert jobs from all scannable companies. Returns the count."""
+    """Fetch and idempotently persist every supported company job feed.
+
+    Fetch and persistence failures are isolated per company. A successful
+    company snapshot is committed immediately, so a later failure cannot roll
+    back already-ingested inventory.
+    """
     companies = await company_service.get_scannable_companies(db)
+    # Do not hold an idle database transaction open during network I/O.
+    await db.commit()
     fetch_results = await fetch_service.fetch_all(companies)
 
     total = 0
-    for company, raw_jobs in fetch_results:
-        if not raw_jobs:
+    for fetch_result in fetch_results:
+        if not fetch_result.succeeded:
             continue
-        jobs = await job_service.upsert_jobs(db, raw_jobs, company)
+        try:
+            jobs = await job_service.upsert_jobs(
+                db,
+                fetch_result.jobs,
+                fetch_result.company_id,
+            )
+            await db.commit()
+        except Exception as exc:
+            await db.rollback()
+            # Do not emit the SQLAlchemy traceback here: DBAPI errors include
+            # bound parameters, which can dump entire job descriptions into
+            # scheduler logs. The company and exception type are sufficient
+            # to identify and isolate the failed batch safely.
+            logger.error(
+                "ATS persistence failed company_id=%s error_type=%s",
+                fetch_result.company_id,
+                type(exc).__name__,
+            )
+            continue
         total += len(jobs)
 
-    await db.commit()
     return total
+
+
+async def run_scan_locked() -> int:
+    """Run ingestion while holding one process-independent PostgreSQL lock."""
+    async with engine.connect() as lock_connection:
+        acquired = await lock_connection.scalar(
+            text("SELECT pg_try_advisory_lock(:lock_id)"),
+            {"lock_id": INGESTION_LOCK_ID},
+        )
+        if not acquired:
+            raise IngestionAlreadyRunningError("A job-ingestion run is already active")
+
+        try:
+            async with AsyncSessionLocal() as db:
+                return await run_scan(db)
+        finally:
+            await lock_connection.execute(
+                text("SELECT pg_advisory_unlock(:lock_id)"),
+                {"lock_id": INGESTION_LOCK_ID},
+            )
 
 
 async def get_results(
