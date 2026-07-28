@@ -1,14 +1,19 @@
 # Companies to fetch jobs from via ATS public APIs.
-# source: greenhouse | ashby | lever
+# source: greenhouse | ashby | lever  (adapters exist in app/sources)
+#         workday | workable | smartrecruiters | breezy | comeet | recruiterbox
+#         | eightfold  (no adapter yet — seeded for when one is built, see
+#         CLAUDE.md 'Adding an ATS'; these companies yield zero jobs today)
 # slug: the board slug used in the API endpoint
 #
 # Greenhouse: https://boards-api.greenhouse.io/v1/boards/{slug}/jobs
 # Ashby:      https://api.ashbyhq.com/posting-api/job-board/{slug}
 # Lever:      https://api.lever.co/v0/postings/{slug}
 #
-# 16 companies use custom career pages (no public ATS API) and are excluded:
-# OpenAI, Retool, LivePerson, Talkdesk, Twilio, Dialpad, Gong, Genesys,
+# 15 companies use custom career pages (no public ATS API) and are excluded:
+# OpenAI, Retool, LivePerson, Talkdesk, Dialpad, Gong, Genesys,
 # Salesforce, Langfuse, Cognigy, Make.com, Semios, Hugging Face, Zep AI, Maxim AI
+# (Twilio was in this list too but is confirmed live on Greenhouse as of
+# 2026-07-27 — moved into the Greenhouse batch-import section below.)
 
 companies:
 
@@ -349,6 +354,765 @@ companies:
   - name: Vinted
     source: lever
     slug: vinted
+
+
+  # ══════════════════════════════════════════════════════════
+  # Batch import 2026-07-27 — companies added from companies_mapping.yaml,
+  # deduped against the list above. OpenAI, Retool, and Gong were dropped
+  # despite appearing in that source file — live-verified 404 on the claimed
+  # Greenhouse/Lever slugs, confirming the exclusion note above is still correct
+  # for them. Workday/Workable/SmartRecruiters/Breezy/Comeet/RecruiterBox/
+  # Eightfold have NO adapter in app/sources yet — seeded but will yield zero
+  # jobs until an adapter is built. See CLAUDE.md 'Adding an ATS'.
+  # ══════════════════════════════════════════════════════════
+
+  # ── Greenhouse (105) ──
+
+  - name: "10Pearls"
+    source: greenhouse
+    slug: "10pearls"
+
+  - name: "Careem Technologies"
+    source: greenhouse
+    slug: "careem"
+
+  - name: "Motive (KeepTruckin)"
+    source: greenhouse
+    slug: "gomotive"
+
+  - name: "foodpanda Pakistan"
+    source: greenhouse
+    slug: "foodpandapakistan"
+
+  - name: "Stripe"
+    source: greenhouse
+    slug: "stripe"
+
+  - name: "Databricks"
+    source: greenhouse
+    slug: "databricks"
+
+  - name: "Coinbase"
+    source: greenhouse
+    slug: "coinbase"
+
+  - name: "Airbnb"
+    source: greenhouse
+    slug: "airbnb"
+
+  - name: "Lyft"
+    source: greenhouse
+    slug: "lyft"
+
+  - name: "DoorDash"
+    source: greenhouse
+    slug: "doordash"
+
+  - name: "Instacart"
+    source: greenhouse
+    slug: "instacart"
+
+  - name: "Robinhood"
+    source: greenhouse
+    slug: "robinhood"
+
+  - name: "Ramp"
+    source: greenhouse
+    slug: "ramp"
+
+  - name: "Brex"
+    source: greenhouse
+    slug: "brex"
+
+  - name: "Notion"
+    source: greenhouse
+    slug: "notion"
+
+  - name: "Figma"
+    source: greenhouse
+    slug: "figma"
+
+  - name: "Datadog"
+    source: greenhouse
+    slug: "datadog"
+
+  - name: "Cloudflare"
+    source: greenhouse
+    slug: "cloudflare"
+
+  - name: "MongoDB"
+    source: greenhouse
+    slug: "mongodb"
+
+  - name: "Elastic"
+    source: greenhouse
+    slug: "elastic"
+
+  - name: "HashiCorp"
+    source: greenhouse
+    slug: "hashicorp"
+
+  - name: "GitLab"
+    source: greenhouse
+    slug: "gitlab"
+
+  - name: "Twilio"
+    source: greenhouse
+    slug: "twilio"
+
+  - name: "Okta"
+    source: greenhouse
+    slug: "okta"
+
+  - name: "Zscaler"
+    source: greenhouse
+    slug: "zscaler"
+
+  - name: "Asana"
+    source: greenhouse
+    slug: "asana"
+
+  - name: "Gusto"
+    source: greenhouse
+    slug: "gusto"
+
+  - name: "Remote"
+    source: greenhouse
+    slug: "remotecom"
+
+  - name: "Nubank"
+    source: greenhouse
+    slug: "nubank"
+
+  - name: "Affirm"
+    source: greenhouse
+    slug: "affirm"
+
+  - name: "Squarespace"
+    source: greenhouse
+    slug: "squarespace"
+
+  - name: "HubSpot"
+    source: greenhouse
+    slug: "hubspotjobs"
+
+  - name: "Dropbox"
+    source: greenhouse
+    slug: "dropbox"
+
+  - name: "Unity"
+    source: greenhouse
+    slug: "unity3d"
+
+  - name: "Roblox"
+    source: greenhouse
+    slug: "roblox"
+
+  - name: "Epic Games"
+    source: greenhouse
+    slug: "epicgames"
+
+  - name: "Discord"
+    source: greenhouse
+    slug: "discord"
+
+  - name: "Reddit"
+    source: greenhouse
+    slug: "reddit"
+
+  - name: "Pinterest"
+    source: greenhouse
+    slug: "pinterest"
+
+  - name: "Samsung Semiconductor"
+    source: greenhouse
+    slug: "samsungsemiconductor"
+
+  - name: "Sony Interactive Entertainment"
+    source: greenhouse
+    slug: "sonyinteractiveentertainmentglobal"
+
+  - name: "Shopee (Sea)"
+    source: greenhouse
+    slug: "shopee"
+
+  - name: "Wayfair"
+    source: greenhouse
+    slug: "wayfair"
+
+  - name: "Samsara"
+    source: greenhouse
+    slug: "samsara"
+
+  - name: "Grammarly"
+    source: greenhouse
+    slug: "grammarly"
+
+  - name: "Pure Storage"
+    source: greenhouse
+    slug: "purestorage"
+
+  - name: "Twitch"
+    source: greenhouse
+    slug: "twitch"
+
+  - name: "Adyen"
+    source: greenhouse
+    slug: "adyen"
+
+  - name: "PhonePe"
+    source: greenhouse
+    slug: "phonepe"
+
+  - name: "Postman"
+    source: greenhouse
+    slug: "postman"
+
+  - name: "Anduril"
+    source: greenhouse
+    slug: "anduril"
+
+  - name: "SpaceX"
+    source: greenhouse
+    slug: "spacex"
+
+  - name: "Rivian"
+    source: greenhouse
+    slug: "rivian"
+
+  - name: "Waymo"
+    source: greenhouse
+    slug: "waymo"
+
+  - name: "Scale AI"
+    source: greenhouse
+    slug: "scaleai"
+
+  - name: "ServiceTitan"
+    source: greenhouse
+    slug: "servicetitan"
+
+  - name: "Carta"
+    source: greenhouse
+    slug: "carta"
+
+  - name: "Klaviyo"
+    source: greenhouse
+    slug: "klaviyo"
+
+  - name: "SoFi"
+    source: greenhouse
+    slug: "sofi"
+
+  - name: "Chewy"
+    source: greenhouse
+    slug: "chewycom"
+
+  - name: "Carvana"
+    source: greenhouse
+    slug: "carvana"
+
+  - name: "WeWork"
+    source: greenhouse
+    slug: "wework"
+
+  - name: "Peloton"
+    source: greenhouse
+    slug: "peloton"
+
+  - name: "Doximity"
+    source: greenhouse
+    slug: "doximity"
+
+  - name: "Grafana Labs"
+    source: greenhouse
+    slug: "grafanalabs"
+
+  - name: "Chainalysis"
+    source: greenhouse
+    slug: "chainalysis"
+
+  - name: "InMobi"
+    source: greenhouse
+    slug: "inmobi"
+
+  - name: "Calendly"
+    source: greenhouse
+    slug: "calendly"
+
+  - name: "Netlify"
+    source: greenhouse
+    slug: "netlify"
+
+  - name: "Amplitude"
+    source: greenhouse
+    slug: "amplitude"
+
+  - name: "Mixpanel"
+    source: greenhouse
+    slug: "mixpanel"
+
+  - name: "Sentry"
+    source: greenhouse
+    slug: "sentry"
+
+  - name: "PagerDuty"
+    source: greenhouse
+    slug: "pagerduty"
+
+  - name: "Fastly"
+    source: greenhouse
+    slug: "fastly"
+
+  - name: "DigitalOcean"
+    source: greenhouse
+    slug: "digitalocean98"
+
+  - name: "Wolt"
+    source: greenhouse
+    slug: "wolt"
+
+  - name: "Monzo"
+    source: greenhouse
+    slug: "monzo"
+
+  - name: "Trustpilot"
+    source: greenhouse
+    slug: "trustpilot"
+
+  - name: "Gemini"
+    source: greenhouse
+    slug: "gemini"
+
+  - name: "Ripple"
+    source: greenhouse
+    slug: "ripple"
+
+  - name: "Cruise"
+    source: greenhouse
+    slug: "cruise"
+
+  - name: "Toast"
+    source: greenhouse
+    slug: "toast"
+
+  - name: "New Relic"
+    source: greenhouse
+    slug: "newrelic"
+
+  - name: "Webflow"
+    source: greenhouse
+    slug: "webflow"
+
+  - name: "ClickUp"
+    source: greenhouse
+    slug: "clickup"
+
+  - name: "Typeform"
+    source: greenhouse
+    slug: "typeform"
+
+  - name: "Algolia"
+    source: greenhouse
+    slug: "algolia"
+
+  - name: "LaunchDarkly"
+    source: greenhouse
+    slug: "launchdarkly"
+
+  - name: "Cockroach Labs"
+    source: greenhouse
+    slug: "cockroachlabs"
+
+  - name: "Yugabyte"
+    source: greenhouse
+    slug: "yugabyte"
+
+  - name: "Fivetran"
+    source: greenhouse
+    slug: "fivetran"
+
+  - name: "Render"
+    source: greenhouse
+    slug: "render"
+
+  - name: "Abnormal Security"
+    source: greenhouse
+    slug: "abnormalsecurity"
+
+  - name: "Snyk"
+    source: greenhouse
+    slug: "snyk"
+
+  - name: "Tailscale"
+    source: greenhouse
+    slug: "tailscale"
+
+  - name: "CircleCI"
+    source: greenhouse
+    slug: "circleci"
+
+  - name: "Sourcegraph"
+    source: greenhouse
+    slug: "sourcegraph"
+
+  - name: "Whatnot"
+    source: greenhouse
+    slug: "whatnot"
+
+  - name: "Faire"
+    source: greenhouse
+    slug: "faire"
+
+  - name: "Flexport"
+    source: greenhouse
+    slug: "flexport"
+
+  - name: "Nuro"
+    source: greenhouse
+    slug: "nuro"
+
+  - name: "Adept"
+    source: greenhouse
+    slug: "adept"
+
+  - name: "Groq"
+    source: greenhouse
+    slug: "groq"
+
+  - name: "Graphcore"
+    source: greenhouse
+    slug: "graphcore"
+
+  - name: "Tenstorrent"
+    source: greenhouse
+    slug: "tenstorrent"
+
+  # ── Lever (21) ──
+
+  - name: "Educative"
+    source: lever
+    slug: "educative"
+
+  - name: "Plaid"
+    source: lever
+    slug: "plaid"
+
+  - name: "Canva"
+    source: lever
+    slug: "canva"
+
+  - name: "Atlassian"
+    source: lever
+    slug: "atlassian"
+
+  - name: "Shopify"
+    source: lever
+    slug: "shopify"
+
+  - name: "Zendesk"
+    source: lever
+    slug: "zendesk"
+
+  - name: "Netflix"
+    source: lever
+    slug: "netflix"
+
+  - name: "Gojek"
+    source: lever
+    slug: "gojek"
+
+  - name: "Etsy"
+    source: lever
+    slug: "etsy"
+
+  - name: "Confluent"
+    source: lever
+    slug: "confluent"
+
+  - name: "Paytm"
+    source: lever
+    slug: "paytm"
+
+  - name: "Swiggy"
+    source: lever
+    slug: "swiggy"
+
+  - name: "Kraken"
+    source: lever
+    slug: "kraken"
+
+  - name: "Opendoor"
+    source: lever
+    slug: "opendoor"
+
+  - name: "Rappi"
+    source: lever
+    slug: "rappi"
+
+  - name: "Dynatrace"
+    source: lever
+    slug: "dynatrace"
+
+  - name: "Yelp"
+    source: lever
+    slug: "yelp"
+
+  - name: "Starburst"
+    source: lever
+    slug: "starburstdata"
+
+  - name: "dbt Labs"
+    source: lever
+    slug: "dbtlabs"
+
+  - name: "SonarSource"
+    source: lever
+    slug: "sonarsource"
+
+  - name: "Gopuff"
+    source: lever
+    slug: "gopuff"
+
+  # ── Ashby (19) ──
+
+  - name: "Snowflake"
+    source: ashby
+    slug: "snowflake"
+
+  - name: "Deel"
+    source: ashby
+    slug: "deel"
+
+  - name: "UiPath"
+    source: ashby
+    slug: "uipath"
+
+  - name: "NerdWallet"
+    source: ashby
+    slug: "nerdwallet"
+
+  - name: "Mollie"
+    source: ashby
+    slug: "mollie"
+
+  - name: "Character.AI"
+    source: ashby
+    slug: "character"
+
+  - name: "1Password"
+    source: ashby
+    slug: "1password"
+
+  - name: "Sanity"
+    source: ashby
+    slug: "sanity"
+
+  - name: "Weaviate"
+    source: ashby
+    slug: "weaviate"
+
+  - name: "Replit"
+    source: ashby
+    slug: "replit"
+
+  - name: "Harvey"
+    source: ashby
+    slug: "harvey"
+
+  - name: "Ledger"
+    source: ashby
+    slug: "ledger"
+
+  - name: "Linear"
+    source: ashby
+    slug: "linear"
+
+  - name: "Raycast"
+    source: ashby
+    slug: "raycast"
+
+  - name: "Modal"
+    source: ashby
+    slug: "modal"
+
+  - name: "Baseten"
+    source: ashby
+    slug: "baseten"
+
+  - name: "Cursor (Anysphere)"
+    source: ashby
+    slug: "cursor"
+
+  - name: "Warp"
+    source: ashby
+    slug: "warp"
+
+  - name: "Gitpod"
+    source: ashby
+    slug: "gitpod"
+
+  # ── Workday (22) — no adapter yet ──
+
+  - name: "CureMD"
+    source: workday
+    slug: "curemd.wd1.myworkdayjobs.com"
+
+  - name: "CrowdStrike"
+    source: workday
+    slug: "crowdstrike.wd5.myworkdayjobs.com"
+
+  - name: "Palo Alto Networks"
+    source: workday
+    slug: "paloaltonetworks.wd5.myworkdayjobs.com"
+
+  - name: "Workday"
+    source: workday
+    slug: "workday.wd5.myworkdayjobs.com"
+
+  - name: "PayPal"
+    source: workday
+    slug: "paypal.wd1.myworkdayjobs.com"
+
+  - name: "Nvidia"
+    source: workday
+    slug: "nvidia.wd5.myworkdayjobs.com"
+
+  - name: "Qualcomm"
+    source: workday
+    slug: "qualcomm.wd5.myworkdayjobs.com"
+
+  - name: "Micron"
+    source: workday
+    slug: "micron.wd1.myworkdayjobs.com"
+
+  - name: "Broadcom"
+    source: workday
+    slug: "broadcom.wd1.myworkdayjobs.com"
+
+  - name: "Adobe"
+    source: workday
+    slug: "adobe.wd5.myworkdayjobs.com"
+
+  - name: "VMware"
+    source: workday
+    slug: "vmware.wd1.myworkdayjobs.com"
+
+  - name: "Dell"
+    source: workday
+    slug: "dell.wd1.myworkdayjobs.com"
+
+  - name: "Cisco"
+    source: workday
+    slug: "cisco.wd5.myworkdayjobs.com"
+
+  - name: "Grab"
+    source: workday
+    slug: "grab.wd3.myworkdayjobs.com"
+
+  - name: "Rakuten"
+    source: workday
+    slug: "rakuten.wd1.myworkdayjobs.com"
+
+  - name: "Delivery Hero"
+    source: workday
+    slug: "deliveryhero.wd3.myworkdayjobs.com"
+
+  - name: "eBay"
+    source: workday
+    slug: "ebay.wd5.myworkdayjobs.com"
+
+  - name: "Expedia"
+    source: workday
+    slug: "expedia.wd5.myworkdayjobs.com"
+
+  - name: "BrowserStack"
+    source: workday
+    slug: "browserstack.wd3.myworkdayjobs.com"
+
+  - name: "Cloudera"
+    source: workday
+    slug: "cloudera.wd5.myworkdayjobs.com"
+
+  - name: "Criteo"
+    source: workday
+    slug: "criteo.wd3.myworkdayjobs.com"
+
+  - name: "Kavak"
+    source: workday
+    slug: "kavak.wd3.myworkdayjobs.com"
+
+  # ── Workable (3) — no adapter yet ──
+
+  - name: "Devsinc"
+    source: workable
+    slug: "devsinc-17"
+
+  - name: "Hugging Face"
+    source: workable
+    slug: "huggingface"
+
+  - name: "Getir"
+    source: workable
+    slug: "getir"
+
+  # ── SmartRecruiters (3) — no adapter yet ──
+
+  - name: "ServiceNow"
+    source: smartrecruiters
+    slug: "ServiceNow"
+
+  - name: "Zomato"
+    source: smartrecruiters
+    slug: "Zomato1"
+
+  - name: "Freshworks"
+    source: smartrecruiters
+    slug: "Freshworks"
+
+  # ── Breezy (2) — no adapter yet ──
+
+  - name: "Dubizzle Labs"
+    source: breezy
+    slug: "dubizzlelabs"
+
+  - name: "Zameen"
+    source: breezy
+    slug: "zameen"
+
+  # ── Comeet (2) — no adapter yet ──
+
+  - name: "Zoom"
+    source: comeet
+    slug: "zoom"
+
+  - name: "monday.com"
+    source: comeet
+    slug: "monday"
+
+  # ── RecruiterBox (1) — no adapter yet ──
+
+  - name: "Razorpay"
+    source: recruiterbox
+    slug: "razorpay"
+
+  # ── Eightfold (4) — no adapter yet ──
+
+  - name: "NetApp"
+    source: eightfold
+    slug: "netapp"
+
+  - name: "Akamai"
+    source: eightfold
+    slug: "akamai"
+
+  - name: "Nutanix"
+    source: eightfold
+    slug: "nutanix"
+
+  - name: "Mercado Libre"
+    source: eightfold
+    slug: "mercadolibre"
 
 
 # ── Filters ──────────────────────────────────────────────────────
