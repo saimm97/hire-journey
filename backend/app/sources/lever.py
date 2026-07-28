@@ -2,7 +2,12 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from typing import Any
 
-from app.sources.base import BaseATSSource, RawJob, strip_html
+from app.sources.base import (
+    BaseATSSource,
+    RawJob,
+    strip_html,
+)
+from app.sources.salary_parser import extract_salary_range, parse_salary_amount
 
 LEVER_API = "https://api.lever.co/v0/postings/{slug}"
 
@@ -32,26 +37,51 @@ def _description(job: dict) -> str:
     return " ".join(filter(None, parts))
 
 
+def _salary_range(job: dict, description: str) -> tuple[int | None, int | None]:
+    salary = job.get("salaryRange") or {}
+    interval = str(salary.get("interval") or "").lower()
+    if not interval or "year" in interval or "annual" in interval:
+        minimum = parse_salary_amount(salary.get("min"))
+        maximum = parse_salary_amount(salary.get("max"))
+        if minimum is not None or maximum is not None:
+            return minimum, maximum
+
+    from_salary_field = extract_salary_range(
+        job.get("salaryDescriptionPlain"),
+        require_salary_context=False,
+    )
+    if from_salary_field != (None, None):
+        return from_salary_field
+    return extract_salary_range(description)
+
+
 class LeverSource(BaseATSSource):
     name = "lever"
     hosts = ("jobs.lever.co",)
+    feed_hosts = ("api.lever.co", "api.eu.lever.co")
 
     def _list_url(self, company_slug: str) -> str:
         return LEVER_API.format(slug=company_slug)
 
     def _iter_raw(self, data: Any) -> Iterable[dict]:
+        if not isinstance(data, list):
+            raise TypeError("expected a root job list")
         return data  # Lever returns a root array, no {"jobs": ...} wrapper
 
     def _parse(self, raw: dict, company_name: str) -> RawJob | None:
         url = raw.get("hostedUrl", "")
         if not url:
             return None
+        description = _description(raw)
+        salary_min, salary_max = _salary_range(raw, description)
         return RawJob(
             title=raw.get("text", ""),
             url=url,
             company=company_name,
             location=_locations(raw),
-            description=_description(raw),
+            description=description,
             source_name=self.name,
             posted_at=_from_epoch_millis(raw.get("createdAt")),
+            salary_min=salary_min,
+            salary_max=salary_max,
         )

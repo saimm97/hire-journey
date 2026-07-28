@@ -14,12 +14,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from html import unescape
 from typing import Any, Protocol
+from urllib.parse import urljoin, urlparse
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
 TIMEOUT = 10.0
+MAX_RESPONSE_BYTES = 50 * 1024 * 1024
 _HTML_TAG = re.compile(r"<[^>]+>")
 _WHITESPACE = re.compile(r"\s+")
 
@@ -27,6 +29,7 @@ _WHITESPACE = re.compile(r"\s+")
 # this board" — a normal, expected outcome we must not retry or the scan crawls.
 _RETRY_STATUSES = {429, 500, 502, 503, 504}
 _MAX_ATTEMPTS = 3
+_MAX_REDIRECTS = 3
 
 # Keep-alive pool shared by every adapter. A scan issues one request per
 # (company, adapter) pair against a handful of ATS hosts, so reusing
@@ -48,7 +51,9 @@ def get_client() -> httpx.AsyncClient:
     if _client is None or _client.is_closed:
         _client = httpx.AsyncClient(
             timeout=TIMEOUT,
-            follow_redirects=True,
+            # Redirect targets are followed manually only after their hostname
+            # passes the same allowlist as the original feed.
+            follow_redirects=False,
             limits=httpx.Limits(
                 max_connections=_MAX_CONNECTIONS,
                 max_keepalive_connections=_MAX_KEEPALIVE,
@@ -77,23 +82,76 @@ def _retry_delay(response: httpx.Response, attempt: int) -> float:
     return float(2**attempt)
 
 
-async def fetch_json(url: str) -> Any:
+def _validate_fetch_url(url: str, allowed_hosts: tuple[str, ...]) -> None:
+    """Reject non-HTTPS, credentialed, or off-provider feed URLs."""
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    if (
+        parsed.scheme.lower() != "https"
+        or host not in allowed_hosts
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.port not in (None, 443)
+    ):
+        raise ValueError("Unsupported or unsafe ATS feed URL")
+
+
+async def _get_with_safe_redirects(
+    client: httpx.AsyncClient,
+    url: str,
+    allowed_hosts: tuple[str, ...],
+) -> httpx.Response:
+    current_url = url
+    for _ in range(_MAX_REDIRECTS + 1):
+        response = await client.get(current_url)
+        if not response.is_redirect:
+            return response
+        location = response.headers.get("Location")
+        if not location:
+            raise ValueError("ATS redirect is missing a target")
+        current_url = urljoin(str(response.url), location)
+        _validate_fetch_url(current_url, allowed_hosts)
+    raise ValueError("ATS response exceeded the redirect limit")
+
+
+async def fetch_json(url: str, *, allowed_hosts: tuple[str, ...] | None = None) -> Any:
     """GET a board endpoint and return parsed JSON, retrying transient failures.
 
     Shared by every adapter so retry/backoff is written once. Raises on a
     non-retryable error status — callers (fetch_service) treat that as
     "this company isn't on this board" and move on.
     """
+    if allowed_hosts is None:
+        original_host = (urlparse(url).hostname or "").lower()
+        allowed_hosts = (original_host,)
+    _validate_fetch_url(url, allowed_hosts)
+
     client = get_client()
     for attempt in range(_MAX_ATTEMPTS):
-        response = await client.get(url)
+        try:
+            response = await _get_with_safe_redirects(client, url, allowed_hosts)
+        except httpx.TransportError:
+            if attempt < _MAX_ATTEMPTS - 1:
+                await asyncio.sleep(float(2**attempt))
+                continue
+            raise
+        _validate_fetch_url(str(response.url), allowed_hosts)
         if response.status_code in _RETRY_STATUSES and attempt < _MAX_ATTEMPTS - 1:
             delay = _retry_delay(response, attempt)
             logger.debug("%s → %s, retrying in %.1fs", url, response.status_code, delay)
             await asyncio.sleep(delay)
             continue
         response.raise_for_status()
-        return response.json()
+        content_length = response.headers.get("Content-Length")
+        if content_length and content_length.isdigit():
+            if int(content_length) > MAX_RESPONSE_BYTES:
+                raise ValueError("ATS response exceeds the configured size limit")
+        if len(response.content) > MAX_RESPONSE_BYTES:
+            raise ValueError("ATS response exceeds the configured size limit")
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise ValueError("ATS response is not valid JSON") from exc
 
 
 def strip_html(raw: str | None) -> str:
@@ -104,7 +162,11 @@ def strip_html(raw: str | None) -> str:
     """
     if not raw:
         return ""
-    return _WHITESPACE.sub(" ", _HTML_TAG.sub(" ", unescape(raw))).strip()
+    # Several Greenhouse boards double-encode both tags and spaces
+    # ("&amp;nbsp;"). Decode twice before removing markup so descriptions and
+    # compensation ranges become ordinary searchable text.
+    decoded = unescape(unescape(raw))
+    return _WHITESPACE.sub(" ", _HTML_TAG.sub(" ", decoded)).strip()
 
 
 def parse_datetime(value: Any) -> datetime | None:
@@ -132,6 +194,8 @@ class RawJob:
     source_name: str = ""
     posted_at: datetime | None = None
     deadline: datetime | None = None
+    salary_min: int | None = None
+    salary_max: int | None = None
 
 
 class JobSource(Protocol):
@@ -140,9 +204,20 @@ class JobSource(Protocol):
     # back to the adapter that produced it — the posting URL is the only origin
     # marker we persist, so adapters must declare their hosts.
     hosts: tuple[str, ...]
+    # Public API hosts accepted for company.careers_url. These are intentionally
+    # separate from the human-facing posting hosts above.
+    feed_hosts: tuple[str, ...]
+
+    def build_list_url(self, company_slug: str) -> str:
+        """Return the public job-feed URL for a company board slug."""
+        ...
 
     async def fetch(self, company_slug: str, company_name: str) -> list[RawJob]:
         """Return every posting on this board for the given company slug."""
+        ...
+
+    async def fetch_url(self, feed_url: str, company_name: str) -> list[RawJob]:
+        """Fetch the exact allowlisted feed URL stored for a company."""
         ...
 
     async def fetch_description(self, company_slug: str, job_url: str) -> str | None:
@@ -170,6 +245,7 @@ class BaseATSSource(ABC):
 
     name: str
     hosts: tuple[str, ...]
+    feed_hosts: tuple[str, ...]
 
     @abstractmethod
     def _list_url(self, company_slug: str) -> str:
@@ -182,13 +258,40 @@ class BaseATSSource(ABC):
     def _iter_raw(self, data: Any) -> Iterable[dict]:
         """Extract the postings list from the raw response. Default assumes a
         ``{"jobs": [...]}`` envelope; override for other shapes."""
-        return data.get("jobs", [])
+        if not isinstance(data, dict) or not isinstance(data.get("jobs"), list):
+            raise TypeError("expected a jobs list")
+        return data["jobs"]
+
+    def build_list_url(self, company_slug: str) -> str:
+        """Return the provider URL used to list this company's public jobs."""
+        return self._list_url(company_slug)
 
     async def fetch(self, company_slug: str, company_name: str) -> list[RawJob]:
-        data = await fetch_json(self._list_url(company_slug))
+        return await self.fetch_url(self.build_list_url(company_slug), company_name)
+
+    async def fetch_url(self, feed_url: str, company_name: str) -> list[RawJob]:
+        """Fetch and parse one exact provider feed URL.
+
+        Invalid records are skipped individually so one malformed posting does
+        not discard an otherwise valid board snapshot. A malformed response
+        envelope still raises because it cannot be treated as a complete board.
+        """
+        data = await fetch_json(feed_url, allowed_hosts=self.feed_hosts)
+        try:
+            raw_items = self._iter_raw(data)
+        except (AttributeError, TypeError) as exc:
+            raise ValueError(f"Invalid {self.name} job-feed response") from exc
+
         jobs = []
-        for raw in self._iter_raw(data):
-            job = self._parse(raw, company_name)
+        for raw in raw_items:
+            if not isinstance(raw, dict):
+                logger.warning("%s returned a non-object job record", self.name)
+                continue
+            try:
+                job = self._parse(raw, company_name)
+            except (AttributeError, TypeError, ValueError):
+                logger.warning("%s returned a malformed job record", self.name)
+                continue
             if job is not None:
                 jobs.append(job)
         return jobs
