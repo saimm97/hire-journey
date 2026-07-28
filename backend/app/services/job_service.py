@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.models.job import Job
 from app.sources import SOURCES, source_for_url
 from app.sources.base import RawJob
+from app.sources.html_sanitizer import sanitize_job_html
 
 UPSERT_CHUNK_SIZE = 500
 MAX_JOB_TITLE_LENGTH = 500
@@ -26,12 +27,13 @@ def _values_for_job(raw: RawJob, company_id: int) -> dict | None:
     url = raw.url.strip() if isinstance(raw.url, str) else ""
     if title is None or not url:
         return None
+    description = sanitize_job_html(raw.description)
     return {
         "company_id": company_id,
         "title": title,
         "url": url,
         "location": _bounded_text(raw.location, MAX_JOB_LOCATION_LENGTH),
-        "description": raw.description or None,
+        "description": description or None,
         "posted_at": raw.posted_at,
         "deadline": raw.deadline,
         "salary_min": raw.salary_min,
@@ -89,7 +91,7 @@ async def ensure_description(db: AsyncSession, job: Job) -> None:
     for candidate in candidates:
         desc = await candidate.fetch_description(job.company.slug, job.url)
         if desc:
-            job.description = desc
+            job.description = sanitize_job_html(desc)
             await db.flush()
             return
 

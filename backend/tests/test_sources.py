@@ -209,6 +209,65 @@ def test_strip_html_handles_entity_encoded_markup():
     assert strip_html("") == ""
 
 
+def test_greenhouse_stores_sanitized_semantic_html_as_description():
+    parsed = GreenhouseSource()._parse(
+        {
+            "title": "Platform Engineer",
+            "absolute_url": "https://boards.greenhouse.io/acme/jobs/123",
+            "location": {"name": "Remote"},
+            "content": (
+                "&lt;h2&gt;Requirements&lt;/h2&gt;&lt;ul&gt;"
+                "&lt;li&gt;Python&lt;/li&gt;&lt;/ul&gt;&lt;script&gt;bad()&lt;/script&gt;"
+            ),
+        },
+        "Acme",
+    )
+
+    assert parsed is not None
+    assert parsed.description == "<h2>Requirements</h2><ul><li>Python</li></ul>"
+
+
+def test_lever_rebuilds_named_html_sections_without_trusting_attributes():
+    parsed = LeverSource()._parse(
+        {
+            "text": "Backend Engineer",
+            "hostedUrl": "https://jobs.lever.co/acme/job-1",
+            "descriptionPlain": "Build reliable services.",
+            "description": '<p class="opening">Build reliable services.</p>',
+            "lists": [
+                {
+                    "text": "Requirements",
+                    "content": '<ul onclick="bad()"><li>Python</li></ul>',
+                }
+            ],
+            "additional": "<p>Closing note.</p>",
+        },
+        "Acme",
+    )
+
+    assert parsed is not None
+    assert parsed.description == (
+        "<p>Build reliable services.</p><h3>Requirements</h3>"
+        "<ul><li>Python</li></ul><p>Closing note.</p>"
+    )
+
+
+def test_ashby_retains_its_documented_description_html_field():
+    parsed = AshbySource()._parse(
+        {
+            "title": "Product Engineer",
+            "jobUrl": "https://jobs.ashbyhq.com/acme/job-1",
+            "location": "Remote",
+            "descriptionPlain": "What you will do Build products.",
+            "descriptionHtml": "<h2>What you will do</h2><p>Build products.</p>",
+        },
+        "Acme",
+    )
+
+    assert parsed is not None
+    assert parsed.description == "<h2>What you will do</h2><p>Build products.</p>"
+
+
 @pytest.mark.parametrize(
     "value,expected_year",
     [("2026-06-22T10:35:43-04:00", 2026), ("2026-04-07T16:10:24+00:00", 2026)],

@@ -61,3 +61,11 @@ def test_no_terms_yields_zero():
     assert (
         keyword_score("Backend Engineer", "python", search_terms=[], resume_skills=["python"]) == 0
     )
+
+
+def test_semantic_html_tags_never_become_scoring_terms():
+    assert keyword_score(
+        title="Backend Engineer",
+        description="<table><tbody><tr><td>Python</td></tr></tbody></table>",
+        search_terms=["table"],
+    ) == 0

@@ -10,6 +10,7 @@ from app.models.job import Job
 from app.models.user import User
 from app.schemas.job import JobDetail, JobListResponse
 from app.services.job_service import get_job_with_description
+from app.sources.html_sanitizer import sanitize_job_html
 
 router = APIRouter()
 
@@ -21,7 +22,8 @@ def _to_detail(job: Job) -> JobDetail:
         company_name=job.company.name,
         location=job.location,
         url=job.url,
-        description=job.description,
+        # Defense in depth for legacy rows and any future non-ATS write path.
+        description=sanitize_job_html(job.description) or None,
         salary_min=job.salary_min,
         salary_max=job.salary_max,
         deadline=job.deadline,

@@ -1,5 +1,6 @@
 from collections.abc import Iterable
 from datetime import datetime, timezone
+from html import escape
 from typing import Any
 
 from app.sources.base import (
@@ -7,6 +8,7 @@ from app.sources.base import (
     RawJob,
     strip_html,
 )
+from app.sources.html_sanitizer import sanitize_job_html
 from app.sources.salary_parser import extract_salary_range, parse_salary_amount
 
 LEVER_API = "https://api.lever.co/v0/postings/{slug}"
@@ -35,6 +37,20 @@ def _description(job: dict) -> str:
         if label and content:
             parts.append(f"{label}: {content}")
     return " ".join(filter(None, parts))
+
+
+def _description_html(job: dict) -> str:
+    parts = [job.get("description", "") or ""]
+    for section in job.get("lists", []):
+        label = section.get("text", "")
+        content = section.get("content", "")
+        if label:
+            parts.append(f"<h3>{escape(str(label))}</h3>")
+        if content:
+            parts.append(str(content))
+    if additional := job.get("additional"):
+        parts.append(str(additional))
+    return sanitize_job_html("".join(parts))
 
 
 def _salary_range(job: dict, description: str) -> tuple[int | None, int | None]:
@@ -72,14 +88,15 @@ class LeverSource(BaseATSSource):
         url = raw.get("hostedUrl", "")
         if not url:
             return None
-        description = _description(raw)
-        salary_min, salary_max = _salary_range(raw, description)
+        plain_description = _description(raw)
+        description = _description_html(raw)
+        salary_min, salary_max = _salary_range(raw, plain_description)
         return RawJob(
             title=raw.get("text", ""),
             url=url,
             company=company_name,
             location=_locations(raw),
-            description=description,
+            description=description or plain_description,
             source_name=self.name,
             posted_at=_from_epoch_millis(raw.get("createdAt")),
             salary_min=salary_min,

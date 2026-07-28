@@ -7,6 +7,7 @@ from app.sources.base import (
     parse_datetime,
     strip_html,
 )
+from app.sources.html_sanitizer import sanitize_job_html
 from app.sources.salary_parser import extract_salary_range, parse_salary_amount
 
 # content=true returns every posting's full description in the same response.
@@ -51,14 +52,16 @@ class GreenhouseSource(BaseATSSource):
         url = raw.get("absolute_url", "")
         if not url:
             return None
-        description = strip_html(raw.get("content"))
-        salary_min, salary_max = _salary_range(raw, description)
+        raw_content = raw.get("content")
+        plain_description = strip_html(raw_content)
+        description = sanitize_job_html(raw_content, decode_markup=True)
+        salary_min, salary_max = _salary_range(raw, plain_description)
         return RawJob(
             title=raw.get("title", ""),
             url=url,
             company=company_name,
             location=(raw.get("location") or {}).get("name", ""),
-            description=description,
+            description=description or plain_description,
             source_name=self.name,
             # first_published is set once at posting time and never moves.
             # (updated_at also exists here — unused until we do change detection.)
@@ -83,4 +86,9 @@ class GreenhouseSource(BaseATSSource):
             data = await fetch_json(url)
         except Exception:
             return None
-        return strip_html(data.get("content")) or None
+        raw_content = data.get("content")
+        return (
+            sanitize_job_html(raw_content, decode_markup=True)
+            or strip_html(raw_content)
+            or None
+        )

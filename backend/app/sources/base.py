@@ -219,6 +219,7 @@ class RawJob:
     url: str
     company: str
     location: str
+    # Sanitized semantic HTML. Text-only consumers strip tags at their boundary.
     description: str = ""
     source_name: str = ""
     posted_at: datetime | None = None

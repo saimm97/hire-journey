@@ -17,6 +17,7 @@ from app.models.profile import Profile
 from app.models.technology import ProfileTechnology
 from app.services import resume_service
 from app.services.job_service import get_job_with_description
+from app.sources.base import strip_html
 
 
 async def run_evaluation(db: AsyncSession, user_id: int, job_id: int) -> Evaluation:
@@ -62,7 +63,7 @@ async def run_evaluation(db: AsyncSession, user_id: int, job_id: int) -> Evaluat
         job_title=job.title,
         company=job.company.name,
         location=job.location,
-        description=job.description or "",
+        description=strip_html(job.description),
     )
 
     evaluation = Evaluation(

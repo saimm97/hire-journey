@@ -3,6 +3,7 @@ from app.sources.base import (
     RawJob,
     parse_datetime,
 )
+from app.sources.html_sanitizer import sanitize_job_html
 from app.sources.salary_parser import extract_salary_range, parse_salary_amount
 
 ASHBY_API = "https://api.ashbyhq.com/posting-api/job-board/{slug}?includeCompensation=true"
@@ -63,12 +64,14 @@ class AshbySource(BaseATSSource):
         if not url or raw.get("isListed") is False:
             return None
         salary_min, salary_max = _salary_range(raw)
+        plain_description = raw.get("descriptionPlain", "") or ""
+        description = sanitize_job_html(raw.get("descriptionHtml"))
         return RawJob(
             title=raw.get("title", ""),
             url=url,
             company=company_name,
             location=_locations(raw),
-            description=raw.get("descriptionPlain", "") or "",
+            description=description or plain_description,
             source_name=self.name,
             posted_at=parse_datetime(raw.get("publishedAt")),
             salary_min=salary_min,

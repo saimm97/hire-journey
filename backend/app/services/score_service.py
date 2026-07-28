@@ -16,6 +16,8 @@ a 500-word description.
 
 import re
 
+from app.sources.base import strip_html
+
 _STOP_WORDS = {
     "the",
     "and",
@@ -104,7 +106,9 @@ def keyword_score(
         return 0
 
     title_tokens = _tokenize(title)
-    desc_tokens = _tokenize(description)
+    # Stored descriptions are sanitized semantic HTML. Formatting tags must
+    # never become ranking terms (for example, a search for "table").
+    desc_tokens = _tokenize(strip_html(description))
 
     title_hits = len(search_tokens & title_tokens) * 3
     desc_hits = len(search_tokens & desc_tokens)

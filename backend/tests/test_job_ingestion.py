@@ -81,7 +81,95 @@ async def test_same_feed_called_twice_upserts_one_job(
     assert len(stored) == 1
     assert stored[0].url == "https://boards.greenhouse.io/pytest-idempotent/jobs/12345"
     assert stored[0].title == "Platform Engineer v2"
-    assert stored[0].description == "Description revision 2"
+    assert stored[0].description == "<p>Description revision 2</p>"
+    assert stored[0].parsed_desc is None
+
+
+async def test_description_is_sanitized_without_overwriting_parsed_metadata(
+    db: AsyncSession,
+    create_ingestion_company,
+):
+    company = await create_ingestion_company(
+        "HTML Merge ATS",
+        "https://api.lever.co/v0/postings/pytest-html-merge",
+    )
+    url = "https://jobs.lever.co/pytest-html-merge/job-1"
+    stored = await job_service.upsert_jobs(
+        db,
+        [
+            RawJob(
+                title="Backend Engineer",
+                url=url,
+                company=company.name,
+                location="Remote",
+                description="<p>Old description</p>",
+            )
+        ],
+        company.id,
+    )
+    stored[0].parsed_desc = {
+        "required_skills": ["Python"],
+    }
+    await db.commit()
+
+    refreshed = await job_service.upsert_jobs(
+        db,
+        [
+            RawJob(
+                title="Backend Engineer",
+                url=url,
+                company=company.name,
+                location="Remote",
+                description=(
+                    '<h2 onclick="bad()">Requirements</h2><p>Python</p>'
+                    "<script>bad()</script>"
+                ),
+            )
+        ],
+        company.id,
+    )
+    await db.commit()
+
+    assert refreshed[0].description == "<h2>Requirements</h2><p>Python</p>"
+    assert refreshed[0].parsed_desc == {"required_skills": ["Python"]}
+
+
+async def test_jobs_api_exposes_sanitized_html_in_description_only(
+    db: AsyncSession,
+    create_ingestion_company,
+    client,
+):
+    company = await create_ingestion_company(
+        "HTML API ATS",
+        "https://api.ashbyhq.com/posting-api/job-board/pytest-html-api",
+    )
+    await job_service.upsert_jobs(
+        db,
+        [
+            RawJob(
+                title="Product Engineer",
+                url="https://jobs.ashbyhq.com/pytest-html-api/job-1",
+                company=company.name,
+                location="Remote",
+                description=(
+                    '<h2 style="color:red">Requirements</h2><ul><li>Python</li></ul>'
+                    "<script>bad()</script>"
+                ),
+            )
+        ],
+        company.id,
+    )
+    await db.commit()
+
+    response = await client.get("/api/v1/jobs", params={"company": company.name})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["results"][0]["description"] == (
+        "<h2>Requirements</h2><ul><li>Python</li></ul>"
+    )
+    assert "description_html" not in body["results"][0]
 
 
 async def test_ingestion_keeps_jobs_that_old_global_filters_rejected(
