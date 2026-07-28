@@ -275,9 +275,14 @@ career-engine/
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | No       | Token expiry, default 60                                          |
 | `GOOGLE_CLIENT_ID`            | No       | OAuth Web client id for "Continue with Google"; blank disables it |
 | `MAX_UPLOAD_MB`               | No       | Max CV upload size in MB, default 5                               |
+| `ATS_HTTP_TIMEOUT_SECONDS`    | No       | ATS HTTP operation timeout, default 10 seconds                    |
+| `ATS_MAX_RESPONSE_MB`         | No       | Maximum decoded ATS response size, default 50 MB                  |
+| `ATS_MAX_ATTEMPTS`            | No       | Maximum attempts for transient ATS failures, default 3            |
+| `ATS_GLOBAL_CONCURRENCY`      | No       | Maximum concurrent company fetches, default 12                    |
+| `ATS_HTTP_MAX_CONNECTIONS`    | No       | Shared ATS HTTP connection-pool limit, default 20                 |
+| `ATS_HTTP_MAX_KEEPALIVE_CONNECTIONS` | No | Shared ATS keep-alive pool limit, default 10                  |
 | `GEMINI_API_KEY`              | Yes      | Gemini API key for AI features                                    |
 | `OPENAI_API_KEY`              | No       | Optional OpenAI fallback                                          |
 
 
 > **Never commit** `.env` **to git.** Each developer maintains their own local copy.
-

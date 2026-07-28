@@ -56,6 +56,9 @@ async def upsert_job(db: AsyncSession, raw: RawJob, company_id: int) -> Job | No
             "location": func.coalesce(excluded.location, cols.location),
             "posted_at": func.coalesce(excluded.posted_at, cols.posted_at),
             "deadline": func.coalesce(excluded.deadline, cols.deadline),
+            # Compensation is an authoritative successful-snapshot field.
+            # Replacing with NULL lets employer removals and parser corrections
+            # clear stale values; failed provider fetches never reach upsert.
             "salary_min": excluded.salary_min,
             "salary_max": excluded.salary_max,
             "updated_at": func.now(),
@@ -130,6 +133,8 @@ async def upsert_jobs(db: AsyncSession, raw_jobs: list[RawJob], company_id: int)
                 "location": func.coalesce(excluded.location, cols.location),
                 "posted_at": func.coalesce(excluded.posted_at, cols.posted_at),
                 "deadline": func.coalesce(excluded.deadline, cols.deadline),
+                # See upsert_job: salary intentionally replaces rather than
+                # coalesces because this is a successful board snapshot.
                 "salary_min": excluded.salary_min,
                 "salary_max": excluded.salary_max,
                 "updated_at": func.now(),

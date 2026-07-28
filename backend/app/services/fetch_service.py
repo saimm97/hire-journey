@@ -9,18 +9,12 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 
+from app.config import settings
 from app.models.company import Company
-from app.sources import source_for_feed_url
+from app.sources import SOURCE_REGISTRY, registration_for_feed_url
 from app.sources.base import RawJob
 
 logger = logging.getLogger(__name__)
-
-CONCURRENCY = 12
-PROVIDER_CONCURRENCY = {
-    "greenhouse": 6,
-    "lever": 4,
-    "ashby": 4,
-}
 
 
 @dataclass
@@ -49,14 +43,21 @@ async def _fetch_one(
     if not feed_url:
         return CompanyFetchResult(company_id=company_id, error_code="missing_feed_url")
 
-    source = source_for_feed_url(feed_url)
-    if source is None:
+    registration = registration_for_feed_url(feed_url)
+    if registration is None:
         logger.warning("Unsupported ATS feed URL for company_id=%s", company_id)
         return CompanyFetchResult(company_id=company_id, error_code="unsupported_feed_url")
 
+    source = registration.source
+    # Both objects come from the validated source registry.
+    provider_sem = provider_sems[source.name]
     try:
-        async with global_sem, provider_sems[source.name]:
-            fetched = await source.fetch_url(feed_url, company.name)
+        # Provider-first avoids consuming a global slot while a saturated
+        # provider queue waits. A running fetch intentionally retains both
+        # permits through retry backoff to keep degraded providers bounded.
+        async with provider_sem:
+            async with global_sem:
+                fetched = await source.fetch_url(feed_url, company.name)
     except Exception as exc:
         # Source failures are isolated: never abort other company scans and do
         # not put response bodies or job content in logs.
@@ -92,9 +93,10 @@ async def _fetch_one(
 
 async def fetch_all(companies: list[Company]) -> list[CompanyFetchResult]:
     """Fetch all company feeds with global and provider-specific limits."""
-    global_sem = asyncio.Semaphore(CONCURRENCY)
+    global_sem = asyncio.Semaphore(settings.ats_global_concurrency)
     provider_sems = {
-        provider: asyncio.Semaphore(limit) for provider, limit in PROVIDER_CONCURRENCY.items()
+        name: asyncio.Semaphore(registration.concurrency_limit)
+        for name, registration in SOURCE_REGISTRY.items()
     }
     tasks = [_fetch_one(company, global_sem, provider_sems) for company in companies]
     return list(await asyncio.gather(*tasks))

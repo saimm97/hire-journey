@@ -194,7 +194,7 @@ async def test_bulk_upsert_chunks_large_boards(
     assert count == 5
 
 
-async def test_ingestion_normalizes_values_to_existing_job_column_limits(
+async def test_successful_snapshot_normalizes_values_and_clears_missing_salary(
     db: AsyncSession,
     create_ingestion_company,
 ):
@@ -237,6 +237,49 @@ async def test_ingestion_normalizes_values_to_existing_job_column_limits(
     assert len(refreshed) == 1
     assert refreshed[0].salary_min is None
     assert refreshed[0].salary_max is None
+
+
+async def test_failed_fetch_preserves_existing_salary(
+    db: AsyncSession,
+    create_ingestion_company,
+    monkeypatch,
+):
+    company = await create_ingestion_company(
+        "Salary Preservation ATS",
+        " ",
+    )
+    await job_service.upsert_jobs(
+        db,
+        [
+            RawJob(
+                title="Platform Engineer",
+                url="https://jobs.lever.co/pytest-salary-preservation/job-1",
+                company=company.name,
+                location="Remote",
+                salary_min=140_000,
+                salary_max=180_000,
+            )
+        ],
+        company.id,
+    )
+    await db.commit()
+
+    async def fail_fetch(_url: str, _company_name: str) -> list[RawJob]:
+        raise TimeoutError("provider timed out")
+
+    async def only_test_company(_db: AsyncSession) -> list[Company]:
+        return [company]
+
+    monkeypatch.setattr(SOURCES["lever"], "fetch_url", fail_fetch)
+    monkeypatch.setattr(company_service, "get_scannable_companies", only_test_company)
+
+    assert await search_service.run_scan(db) == 0
+    stored = await db.scalar(
+        select(Job).where(Job.url == "https://jobs.lever.co/pytest-salary-preservation/job-1")
+    )
+    assert stored is not None
+    assert stored.salary_min == 140_000
+    assert stored.salary_max == 180_000
 
 
 async def test_persistence_failure_does_not_expire_later_company_results(
@@ -284,9 +327,11 @@ async def test_persistence_failure_does_not_expire_later_company_results(
     monkeypatch.setattr(job_service, "upsert_jobs", fail_first_upsert)
 
     assert await search_service.run_scan(db) == 1
-    assert await db.scalar(
-        select(func.count()).select_from(Job).where(Job.company_id == failed_id)
-    ) == 0
-    assert await db.scalar(
-        select(func.count()).select_from(Job).where(Job.company_id == healthy_id)
-    ) == 1
+    assert (
+        await db.scalar(select(func.count()).select_from(Job).where(Job.company_id == failed_id))
+        == 0
+    )
+    assert (
+        await db.scalar(select(func.count()).select_from(Job).where(Job.company_id == healthy_id))
+        == 1
+    )

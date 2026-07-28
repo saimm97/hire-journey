@@ -14,11 +14,21 @@ Phase 4: Offline eval set       →   Phase 6: Learning to rank
 
 ## Phase 1 — Ingestion correctness (no migration) — IN PROGRESS
 
-1. **Move filtering from ingestion time to read time.** `fetch_service.py` currently
-  filters jobs (title/location allow-block lists from `companies.yaml`) *before*
-   `upsert_jobs` — a filtered-out job is never stored, permanently, for any user.
-   Fix: store everything; apply the same filter inside `search_service.get_results`
-   instead. Pure relocation, no user-visible behavior change on its own.
+The ingestion foundation now reads exact `careers_url` values from the database,
+routes each allowlisted feed to one registered adapter, stores every valid public
+posting, and upserts idempotently on the existing job URL constraint. The YAML
+catalog is seed input only and can be removed later without changing the runtime.
+
+HTTP responses are streamed through a configurable decoded-body limit. Redirects
+are validated and closed hop by hop, transient failures are retried, and one
+company's failure cannot abort another company's persistence. Global and provider
+semaphores bound concurrent company fetches; provider capacity is acquired first
+so a busy provider cannot reserve idle global slots.
+
+1. **Move filtering from ingestion time to read time — completed.** Ingestion
+   stores the full provider inventory. User roles, skills, locations, work mode,
+   and salary preferences belong to `search_service.get_results` and later
+   matching phases, never the global write path.
 2. **Decouple scanning from the request path.** `POST /search/run` is currently
   callable by any authenticated user and triggers a full scan. Fix: in-process
    APScheduler (`AsyncIOScheduler`) in the FastAPI lifespan, running `run_scan()` on
@@ -40,6 +50,20 @@ Phase 4: Offline eval set       →   Phase 6: Learning to rank
    only uniform closure signal across all three providers regardless.
 5. **Normalize URLs before the uniqueness check** (strip tracking params, trailing
   slash) to reduce accidental same-source duplicate rows.
+
+### Successful-snapshot field policy
+
+Descriptions, locations, posting dates, and deadlines currently retain an older
+non-null value when a successful provider snapshot omits them. Salary is different:
+a successful snapshot replaces both salary columns, including with `NULL`. This
+allows employer removals and salary-parser corrections to clear stale or false
+values. A failed provider fetch never reaches the upsert and therefore preserves
+the stored salary.
+
+The current `RawJob` contract cannot distinguish "explicitly absent" from
+"present but unparseable." If transient omissions become common, add a three-state
+salary result (`present`, `absent`, `unknown`) and provenance before changing the
+SQL policy. Blindly coalescing salary would retain known bad values indefinitely.
 
 Explicitly deferred (needs a real migration — revisit only if these become true):
 a `job_sources` table / `(job_source_id, external_job_id)` identity — needed if a
@@ -93,4 +117,3 @@ qualification, employer value), not one similarity score.
 value features — worth prioritizing title normalization whenever Phase 2/5 land.
 - Vendor-reported metrics only, not independently audited — treat as directional,
 not a target to hit.
-

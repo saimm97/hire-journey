@@ -6,12 +6,16 @@ in SOURCES is genuinely the only wiring step required.
 
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
 
+from app import sources as source_module
 from app.sources import (
+    SOURCE_REGISTRY,
     SOURCES,
+    SourceRegistration,
     build_job_feed_url,
     normalize_board_slug,
     source_for_feed_url,
@@ -39,6 +43,29 @@ def test_adapter_satisfies_contract(name: str, source: JobSource):
     assert callable(source.fetch)
     assert callable(source.fetch_url)
     assert callable(source.fetch_description)
+
+
+def test_source_registry_is_the_only_provider_policy_registry():
+    assert set(SOURCE_REGISTRY) == set(SOURCES)
+    for name, registration in SOURCE_REGISTRY.items():
+        assert registration.source is SOURCES[name]
+        assert registration.concurrency_limit > 0
+
+
+def test_source_registry_rejects_duplicate_hosts(monkeypatch):
+    duplicate = SimpleNamespace(
+        name="duplicate",
+        hosts=("jobs.duplicate.example",),
+        feed_hosts=("api.lever.co",),
+    )
+    monkeypatch.setitem(
+        SOURCE_REGISTRY,
+        "duplicate",
+        SourceRegistration(duplicate, concurrency_limit=1),
+    )
+
+    with pytest.raises(RuntimeError, match="claimed by both"):
+        source_module._build_host_index("feed_hosts")
 
 
 def test_hosts_are_unique_across_adapters():
@@ -104,6 +131,7 @@ def test_source_for_feed_url_routes_to_one_adapter(url: str, expected: str):
         "http://boards-api.greenhouse.io/v1/boards/acme/jobs",
         "https://user:password@api.lever.co/v0/postings/acme",
         "https://api.lever.co:444/v0/postings/acme",
+        "https://api.lever.co:not-a-port/v0/postings/acme",
         "https://careers.example.com/jobs.json",
         "not-a-url",
     ],

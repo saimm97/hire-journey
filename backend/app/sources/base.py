@@ -1,41 +1,39 @@
 """Shared contract and HTTP plumbing for ATS adapters.
 
-Adding a new ATS is: implement JobSource in a new module, register it in
-SOURCES (sources/__init__.py). Nothing outside app/sources/ needs to change —
-callers dispatch through the registry, never by importing a vendor directly.
+Adding a new ATS is: implement JobSource in a new module, then add one provider
+registration in sources/__init__.py. Nothing outside app/sources/ needs to
+change — callers dispatch through the registry, never by importing a vendor
+directly.
 """
 
 import asyncio
+import json
 import logging
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
+from contextlib import aclosing
 from dataclasses import dataclass
 from datetime import datetime
 from html import unescape
 from typing import Any, Protocol
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 
 import httpx
 
+from app.config import settings
+from app.sources.url_policy import validate_ats_url
+
 logger = logging.getLogger(__name__)
 
-TIMEOUT = 10.0
-MAX_RESPONSE_BYTES = 50 * 1024 * 1024
 _HTML_TAG = re.compile(r"<[^>]+>")
 _WHITESPACE = re.compile(r"\s+")
 
 # Transient failures worth retrying. 4xx other than 429 mean "this slug isn't on
 # this board" — a normal, expected outcome we must not retry or the scan crawls.
 _RETRY_STATUSES = {429, 500, 502, 503, 504}
-_MAX_ATTEMPTS = 3
 _MAX_REDIRECTS = 3
-
-# Keep-alive pool shared by every adapter. A scan issues one request per
-# (company, adapter) pair against a handful of ATS hosts, so reusing
-# connections avoids paying a TCP+TLS handshake on nearly every request.
-_MAX_CONNECTIONS = 20
-_MAX_KEEPALIVE = 10
+_READ_CHUNK_BYTES = 64 * 1024
 
 _client: httpx.AsyncClient | None = None
 
@@ -50,13 +48,13 @@ def get_client() -> httpx.AsyncClient:
     global _client
     if _client is None or _client.is_closed:
         _client = httpx.AsyncClient(
-            timeout=TIMEOUT,
+            timeout=settings.ats_http_timeout_seconds,
             # Redirect targets are followed manually only after their hostname
             # passes the same allowlist as the original feed.
             follow_redirects=False,
             limits=httpx.Limits(
-                max_connections=_MAX_CONNECTIONS,
-                max_keepalive_connections=_MAX_KEEPALIVE,
+                max_connections=settings.ats_http_max_connections,
+                max_keepalive_connections=settings.ats_http_max_keepalive_connections,
             ),
         )
     return _client
@@ -82,36 +80,58 @@ def _retry_delay(response: httpx.Response, attempt: int) -> float:
     return float(2**attempt)
 
 
-def _validate_fetch_url(url: str, allowed_hosts: tuple[str, ...]) -> None:
-    """Reject non-HTTPS, credentialed, or off-provider feed URLs."""
-    parsed = urlparse(url)
-    host = (parsed.hostname or "").lower()
-    if (
-        parsed.scheme.lower() != "https"
-        or host not in allowed_hosts
-        or parsed.username is not None
-        or parsed.password is not None
-        or parsed.port not in (None, 443)
-    ):
-        raise ValueError("Unsupported or unsafe ATS feed URL")
-
-
-async def _get_with_safe_redirects(
+async def _send_with_safe_redirects(
     client: httpx.AsyncClient,
     url: str,
     allowed_hosts: tuple[str, ...],
 ) -> httpx.Response:
+    """Return one open streamed response after validating every redirect hop.
+
+    The caller owns the returned response. Redirect responses are closed here
+    before another connection is opened.
+    """
     current_url = url
     for _ in range(_MAX_REDIRECTS + 1):
-        response = await client.get(current_url)
+        request = client.build_request("GET", current_url)
+        response = await client.send(request, stream=True)
         if not response.is_redirect:
             return response
-        location = response.headers.get("Location")
-        if not location:
-            raise ValueError("ATS redirect is missing a target")
-        current_url = urljoin(str(response.url), location)
-        _validate_fetch_url(current_url, allowed_hosts)
+        try:
+            location = response.headers.get("Location")
+            if not location:
+                raise ValueError("ATS redirect is missing a target")
+            current_url = urljoin(str(response.url), location)
+            validate_ats_url(current_url, allowed_hosts=allowed_hosts)
+        finally:
+            await response.aclose()
     raise ValueError("ATS response exceeded the redirect limit")
+
+
+async def _read_limited_response(response: httpx.Response) -> bytes:
+    """Read a streamed response while enforcing the decoded-body memory cap."""
+    content_length = response.headers.get("Content-Length")
+    if content_length and content_length.isdigit():
+        if int(content_length) > settings.ats_max_response_bytes:
+            raise ValueError("ATS response exceeds the configured size limit")
+
+    content = bytearray()
+    exceeded_limit = False
+    async with aclosing(response.aiter_bytes(chunk_size=_READ_CHUNK_BYTES)) as chunks:
+        async for chunk in chunks:
+            if exceeded_limit:
+                continue
+            if len(content) + len(chunk) > settings.ats_max_response_bytes:
+                # Close the network stream immediately, then let HTTPX unwind
+                # its decoding iterator before raising the stable size error.
+                # This avoids leaving a nested async iterator pending while
+                # still preventing any additional network reads.
+                exceeded_limit = True
+                await response.aclose()
+                continue
+            content.extend(chunk)
+    if exceeded_limit:
+        raise ValueError("ATS response exceeds the configured size limit")
+    return bytes(content)
 
 
 async def fetch_json(url: str, *, allowed_hosts: tuple[str, ...] | None = None) -> Any:
@@ -121,37 +141,46 @@ async def fetch_json(url: str, *, allowed_hosts: tuple[str, ...] | None = None) 
     non-retryable error status — callers (fetch_service) treat that as
     "this company isn't on this board" and move on.
     """
+    parsed = validate_ats_url(url, allowed_hosts=allowed_hosts)
     if allowed_hosts is None:
-        original_host = (urlparse(url).hostname or "").lower()
+        original_host = (parsed.hostname or "").lower()
         allowed_hosts = (original_host,)
-    _validate_fetch_url(url, allowed_hosts)
 
     client = get_client()
-    for attempt in range(_MAX_ATTEMPTS):
+    for attempt in range(settings.ats_max_attempts):
+        response: httpx.Response | None = None
+        retry_delay: float | None = None
         try:
-            response = await _get_with_safe_redirects(client, url, allowed_hosts)
+            response = await _send_with_safe_redirects(client, url, allowed_hosts)
+            validate_ats_url(str(response.url), allowed_hosts=allowed_hosts)
+
+            if response.status_code in _RETRY_STATUSES and attempt < settings.ats_max_attempts - 1:
+                retry_delay = _retry_delay(response, attempt)
+                logger.debug(
+                    "%s → %s, retrying in %.1fs",
+                    url,
+                    response.status_code,
+                    retry_delay,
+                )
+            else:
+                response.raise_for_status()
+                content = await _read_limited_response(response)
+                try:
+                    return json.loads(content)
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    raise ValueError("ATS response is not valid JSON") from exc
         except httpx.TransportError:
-            if attempt < _MAX_ATTEMPTS - 1:
-                await asyncio.sleep(float(2**attempt))
-                continue
-            raise
-        _validate_fetch_url(str(response.url), allowed_hosts)
-        if response.status_code in _RETRY_STATUSES and attempt < _MAX_ATTEMPTS - 1:
-            delay = _retry_delay(response, attempt)
-            logger.debug("%s → %s, retrying in %.1fs", url, response.status_code, delay)
-            await asyncio.sleep(delay)
-            continue
-        response.raise_for_status()
-        content_length = response.headers.get("Content-Length")
-        if content_length and content_length.isdigit():
-            if int(content_length) > MAX_RESPONSE_BYTES:
-                raise ValueError("ATS response exceeds the configured size limit")
-        if len(response.content) > MAX_RESPONSE_BYTES:
-            raise ValueError("ATS response exceeds the configured size limit")
-        try:
-            return response.json()
-        except ValueError as exc:
-            raise ValueError("ATS response is not valid JSON") from exc
+            if attempt >= settings.ats_max_attempts - 1:
+                raise
+            retry_delay = float(2**attempt)
+        finally:
+            if response is not None:
+                await response.aclose()
+
+        if retry_delay is not None:
+            await asyncio.sleep(retry_delay)
+
+    raise RuntimeError("ATS retry loop exhausted unexpectedly")
 
 
 def strip_html(raw: str | None) -> str:

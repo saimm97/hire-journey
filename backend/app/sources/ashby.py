@@ -22,11 +22,9 @@ def _salary_range(job: dict) -> tuple[int | None, int | None]:
     salary_components = [
         component
         for component in components
-        if isinstance(component, dict) and component.get("compensationType") == "Salary"
-        and (
-            not component.get("interval")
-            or "YEAR" in str(component.get("interval")).upper()
-        )
+        if isinstance(component, dict)
+        and component.get("compensationType") == "Salary"
+        and (not component.get("interval") or "YEAR" in str(component.get("interval")).upper())
     ]
     minimums = [
         value

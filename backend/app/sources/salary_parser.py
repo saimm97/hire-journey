@@ -10,8 +10,7 @@ _SALARY_LABEL = (
 )
 _SALARY_HINT = re.compile(rf"\b{_SALARY_LABEL}\b", re.IGNORECASE)
 _UNMARKED_SALARY_PREFIX = re.compile(
-    rf"\b{_SALARY_LABEL}\b"
-    r"\s*(?:(?:is|of|from|between)\s*)?[:=]?\s*$",
+    rf"\b{_SALARY_LABEL}\b" r"\s*(?:(?:is|of|from|between)\s*)?[:=]?\s*$",
     re.IGNORECASE,
 )
 _NON_YEARLY_PAY = re.compile(
@@ -70,12 +69,8 @@ def extract_salary_range(
         if _NON_YEARLY_PAY.search(context) is not None:
             continue
 
-        minimum = _expanded_salary_amount(
-            match.group("minimum"), match.group("minimum_suffix")
-        )
-        maximum = _expanded_salary_amount(
-            match.group("maximum"), match.group("maximum_suffix")
-        )
+        minimum = _expanded_salary_amount(match.group("minimum"), match.group("minimum_suffix"))
+        maximum = _expanded_salary_amount(match.group("maximum"), match.group("maximum_suffix"))
         has_money_marker = any(
             match.group(group)
             for group in (

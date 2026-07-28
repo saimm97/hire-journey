@@ -1,3 +1,6 @@
+from typing import Self
+
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -6,6 +9,27 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str
+
+    # ATS ingestion. These are operational controls rather than provider
+    # parsing policy, so deployments can tune them without changing code.
+    ats_http_timeout_seconds: float = Field(default=10.0, gt=0, le=120)
+    ats_max_response_mb: int = Field(default=50, ge=1, le=100)
+    ats_max_attempts: int = Field(default=3, ge=1, le=5)
+    ats_global_concurrency: int = Field(default=12, ge=1, le=100)
+    ats_http_max_connections: int = Field(default=20, ge=1, le=200)
+    ats_http_max_keepalive_connections: int = Field(default=10, ge=0, le=200)
+
+    @property
+    def ats_max_response_bytes(self) -> int:
+        return self.ats_max_response_mb * 1024 * 1024
+
+    @model_validator(mode="after")
+    def validate_ats_connection_pool(self) -> Self:
+        if self.ats_http_max_keepalive_connections > self.ats_http_max_connections:
+            raise ValueError(
+                "ats_http_max_keepalive_connections cannot exceed ats_http_max_connections"
+            )
+        return self
 
     # Auth
     secret_key: str
