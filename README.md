@@ -228,6 +228,8 @@ pytest
 - [Documentation index](docs/README.md)
 - [End-to-end user onboarding flow](docs/architecture/user-onboarding-flow.md)
 - [Current database schema and ERD](docs/architecture/database-schema.md)
+- [Job ingestion architecture](docs/architecture/job-ingestion.md)
+- [Run job ingestion locally](docs/runbooks/job-ingestion.md)
 - [Architecture decisions](docs/adr/)
 
 Update the relevant documentation in the same pull request as schema or
