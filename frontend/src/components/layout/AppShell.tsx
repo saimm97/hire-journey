@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import type { ReactNode } from "react"
 import {
+  BriefcaseBusiness,
   LayoutGrid,
   LogOut,
   User,
@@ -22,6 +23,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { label: "Dashboard", icon: LayoutGrid, href: "/dashboard" },
+  { label: "Jobs", icon: BriefcaseBusiness, href: "/jobs" },
   { label: "Profile", icon: User, href: "/profile" },
 ]
 

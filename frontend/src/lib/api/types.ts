@@ -174,3 +174,23 @@ export type PreferencesPayload = {
   work_modes_preferred: WorkMode[]
   seniority_level: SeniorityLevel
 }
+
+/** Mirrors backend JobDetail. Salary amounts are annual, but currency is not stored yet. */
+export type Job = {
+  id: number
+  title: string
+  company_name: string
+  location: string | null
+  url: string
+  /** Sanitized semantic HTML for display; legacy rows may contain plain text. */
+  description: string | null
+  salary_min: number | null
+  salary_max: number | null
+  deadline: string | null
+}
+
+/** Mirrors backend JobListResponse. */
+export type JobListResponse = {
+  total: number
+  results: Job[]
+}
