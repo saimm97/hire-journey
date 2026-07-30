@@ -222,3 +222,19 @@ Layered, fully async. Dependency direction is **api → services → models/sour
 
 > Note: `CLAUDE.md` imports `@PRD.md`, which is not present in the repo — that import currently resolves to nothing.
 
+<<<<<<< Updated upstream
+=======
+## Agent skills
+
+### Issue tracker
+
+Work is tracked in Jira project HIJ (`hirejourney`). Agents prepare ticket drafts only and must not create, update, transition, comment on, or label Jira issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Ticket drafts use the canonical triage labels `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This repository uses a single-context domain layout: `CONTEXT.md` at the repository root and architectural decisions under `docs/adr/`. See `docs/agents/domain.md`.
+>>>>>>> Stashed changes
