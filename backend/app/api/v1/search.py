@@ -6,6 +6,7 @@ from app.database import get_db
 from app.models.user import User
 from app.schemas.search import SearchResultsResponse, SearchRunResponse
 from app.services import search_service
+from app.services.ingestion_report import RunStatus
 
 router = APIRouter()
 
@@ -18,14 +19,13 @@ async def run_scan(
 
     Scores are not persisted — rank stored jobs with GET /results.
     """
-    try:
-        total = await search_service.run_scan_locked()
-    except search_service.IngestionAlreadyRunningError as exc:
+    report = await search_service.run_scan_locked()
+    if report.status is RunStatus.SKIPPED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="A job-ingestion run is already active.",
-        ) from exc
-    return SearchRunResponse(total_jobs_fetched=total)
+        )
+    return SearchRunResponse(total_jobs_fetched=report.jobs_upserted)
 
 
 @router.get("/results", response_model=SearchResultsResponse)

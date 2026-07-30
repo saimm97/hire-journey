@@ -68,9 +68,9 @@ async def _run_fixture(
     monkeypatch.setattr(company_service, "get_scannable_companies", only_fixture_company)
     async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as provider_client:
         monkeypatch.setattr(source_base, "_client", provider_client)
-        total = await search_service.run_scan(db)
+        report = await search_service.run_scan(db)
 
-    return total, requested_urls
+    return report.jobs_upserted, requested_urls
 
 
 async def test_greenhouse_fixture_is_ingested_end_to_end(

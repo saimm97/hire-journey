@@ -26,6 +26,19 @@ from app.sources.url_policy import validate_ats_url
 
 logger = logging.getLogger(__name__)
 
+
+class ATSResponseTooLargeError(ValueError):
+    """The decoded provider response exceeded the configured memory limit."""
+
+
+class ATSInvalidJSONError(ValueError):
+    """The provider response body was not valid JSON."""
+
+
+class ATSInvalidFeedError(ValueError):
+    """The decoded provider payload did not contain the expected job-feed shape."""
+
+
 _HTML_TAG = re.compile(r"<[^>]+>")
 _WHITESPACE = re.compile(r"\s+")
 
@@ -112,7 +125,7 @@ async def _read_limited_response(response: httpx.Response) -> bytes:
     content_length = response.headers.get("Content-Length")
     if content_length and content_length.isdigit():
         if int(content_length) > settings.ats_max_response_bytes:
-            raise ValueError("ATS response exceeds the configured size limit")
+            raise ATSResponseTooLargeError("ATS response exceeds the configured size limit")
 
     content = bytearray()
     exceeded_limit = False
@@ -130,7 +143,7 @@ async def _read_limited_response(response: httpx.Response) -> bytes:
                 continue
             content.extend(chunk)
     if exceeded_limit:
-        raise ValueError("ATS response exceeds the configured size limit")
+        raise ATSResponseTooLargeError("ATS response exceeds the configured size limit")
     return bytes(content)
 
 
@@ -168,7 +181,7 @@ async def fetch_json(url: str, *, allowed_hosts: tuple[str, ...] | None = None) 
                 try:
                     return json.loads(content)
                 except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-                    raise ValueError("ATS response is not valid JSON") from exc
+                    raise ATSInvalidJSONError("ATS response is not valid JSON") from exc
         except httpx.TransportError:
             if attempt >= settings.ats_max_attempts - 1:
                 raise
@@ -310,7 +323,7 @@ class BaseATSSource(ABC):
         try:
             raw_items = self._iter_raw(data)
         except (AttributeError, TypeError) as exc:
-            raise ValueError(f"Invalid {self.name} job-feed response") from exc
+            raise ATSInvalidFeedError(f"Invalid {self.name} job-feed response") from exc
 
         jobs = []
         for raw in raw_items:

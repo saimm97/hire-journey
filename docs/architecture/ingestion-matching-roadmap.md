@@ -25,13 +25,19 @@ company's failure cannot abort another company's persistence. Global and provide
 semaphores bound concurrent company fetches; provider capacity is acquired first
 so a busy provider cannot reserve idle global slots.
 
+Every pass now returns an ephemeral structured report with a correlation ID,
+timing, safe company-level warnings/errors, and provider source-health summaries.
+The CLI renders it for operators or emits complete JSON; no scan history is
+persisted.
+
 1. **Move filtering from ingestion time to read time — completed.** Ingestion
    stores the full provider inventory. User roles, skills, locations, work mode,
    and salary preferences belong to `search_service.get_results` and later
    matching phases, never the global write path.
 2. **Decouple scanning from the request path.** `POST /search/run` is currently
   callable by any authenticated user and triggers a full scan. Fix: in-process
-   APScheduler (`AsyncIOScheduler`) in the FastAPI lifespan, running `run_scan()` on
+   APScheduler (`AsyncIOScheduler`) in the FastAPI lifespan, running
+   `run_scan_locked()` on
    an interval (`scan_interval_hours` setting), with `max_instances=1`,
    `coalesce=True`, and an immediate first run on boot. (This exact pattern existed
    before on `feat/pipeline-scheduler`/`feat/job-search`, but those branches predate

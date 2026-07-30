@@ -82,27 +82,44 @@ for the complete run and is exposed to every authenticated user. Use the script
 for operator-driven scans until that endpoint is restricted or removed as part
 of scheduled ingestion.
 
-A successful command ends with output similar to:
+A successful command prints an operator report similar to:
 
 ```text
-Done — jobs fetched and upserted: 20341
+Run: b61a8a82-68b0-4e40-a994-1cb27523ff22
+Status: completed
+Duration: 1m 42s
+Companies: 225 attempted, 225 succeeded, 0 failed, 1 empty
+Jobs: 20,341 fetched, 20,341 upserted
+
+Provider summary:
+  greenhouse: source=healthy, companies=120, jobs=12,430, source_failures=0, persistence_failures=0
+  ashby: source=warning, companies=60, jobs=5,201, source_failures=0, persistence_failures=0
+  lever: source=healthy, companies=45, jobs=2,710, source_failures=0, persistence_failures=0
 ```
 
-That number is the number of rows successfully upserted during this run. It is
-not the number of newly inserted jobs: existing URL matches are included when
-they are refreshed.
+The upserted count is not the number of newly inserted jobs: existing URL
+matches are included when they are refreshed.
+
+For the complete machine-readable report, including every warning and error:
+
+```bash
+python scripts/ingest_jobs.py --json
+```
+
+`completed` and `skipped` exit with status `0`. `completed_with_errors` and
+fatal `failed` runs print their reports and exit with status `1`, allowing shell
+automation to detect an unhealthy run.
 
 It is safe to run the command again. A repeated provider URL updates the
 existing job row through the unique `jobs.url` constraint. It does not insert a
 second row unless the provider returns a materially different URL; broader URL
 normalization is still outstanding.
 
-If another process already owns the database advisory lock, the command exits
-without contacting providers:
+If another process already owns the database advisory lock, the command returns
+a report with `Status: skipped` and exits without contacting providers.
 
-```text
-Skipped — another job-ingestion run already holds the lock
-```
+Reports and run IDs are not stored in PostgreSQL. They remain available only in
+the command output and whatever retention is configured for backend logs.
 
 ## Inspect the result
 
@@ -174,6 +191,8 @@ source .venv/bin/activate
 pytest \
   tests/test_provider_ingestion.py \
   tests/test_job_ingestion.py \
+  tests/test_ingestion_cli.py \
+  tests/test_search_run_reporting.py \
   tests/test_fetch_json.py \
   tests/test_fetch_service.py \
   tests/test_sources.py \

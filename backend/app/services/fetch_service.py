@@ -8,11 +8,20 @@ recommendation query and must never discard inventory here.
 import asyncio
 import logging
 from dataclasses import dataclass, field
+from uuid import UUID
+
+import httpx
 
 from app.config import settings
 from app.models.company import Company
+from app.services.ingestion_report import IngestionIssue, IssueCode, IssueStage
 from app.sources import SOURCE_REGISTRY, registration_for_feed_url
-from app.sources.base import RawJob
+from app.sources.base import (
+    ATSInvalidFeedError,
+    ATSInvalidJSONError,
+    ATSResponseTooLargeError,
+    RawJob,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -22,31 +31,116 @@ class CompanyFetchResult:
     company_id: int
     provider: str | None = None
     jobs: list[RawJob] = field(default_factory=list)
-    error_code: str | None = None
+    error: IngestionIssue | None = None
+
+    @property
+    def error_code(self) -> str | None:
+        return self.error.code.value if self.error is not None else None
 
     @property
     def succeeded(self) -> bool:
-        return self.error_code is None
+        return self.error is None
+
+
+def _fetch_issue(
+    *,
+    company_id: int,
+    company_name: str,
+    provider: str,
+    exc: Exception,
+) -> IngestionIssue:
+    http_status = None
+    retryable = False
+    stage = IssueStage.FETCH
+    if isinstance(exc, ATSResponseTooLargeError):
+        code = IssueCode.RESPONSE_TOO_LARGE
+        message = "The provider response exceeded the configured size limit."
+    elif isinstance(exc, ATSInvalidJSONError):
+        code = IssueCode.INVALID_JSON
+        stage = IssueStage.PARSE
+        message = "The provider response was not valid JSON."
+    elif isinstance(exc, ATSInvalidFeedError):
+        code = IssueCode.INVALID_FEED
+        stage = IssueStage.PARSE
+        message = "The provider response did not contain a valid job feed."
+    elif isinstance(exc, (TimeoutError, httpx.TimeoutException)):
+        code = IssueCode.REQUEST_TIMEOUT
+        message = "The provider request timed out."
+        retryable = True
+    elif isinstance(exc, httpx.HTTPStatusError):
+        http_status = exc.response.status_code
+        if http_status == 429:
+            code = IssueCode.RATE_LIMITED
+            message = "The provider rate limit was exhausted after retries."
+            retryable = True
+        else:
+            code = IssueCode.PROVIDER_HTTP_ERROR
+            message = f"The provider feed returned HTTP {http_status}."
+            retryable = http_status in {500, 502, 503, 504}
+    elif isinstance(exc, httpx.TransportError):
+        code = IssueCode.CONNECTION_FAILED
+        message = "The provider connection failed."
+        retryable = True
+    else:
+        code = IssueCode.UNEXPECTED_FETCH_ERROR
+        message = "The provider feed could not be fetched."
+
+    return IngestionIssue(
+        company_id=company_id,
+        company_name=company_name,
+        provider=provider,
+        stage=stage,
+        code=code,
+        message=message,
+        exception_type=type(exc).__name__,
+        http_status=http_status,
+        retryable=retryable,
+    )
 
 
 async def _fetch_one(
     company: Company,
     global_sem: asyncio.Semaphore,
     provider_sems: dict[str, asyncio.Semaphore],
+    run_id: UUID | None = None,
 ) -> CompanyFetchResult:
     # Keep only primitive company metadata in results. A later database
     # rollback expires every ORM object loaded by the session, and touching an
     # expired Company from this asynchronous persistence loop can trigger an
     # implicit database read (and MissingGreenlet) while handling an error.
     company_id = company.id
+    company_name = company.name
     feed_url = company.careers_url
     if not feed_url:
-        return CompanyFetchResult(company_id=company_id, error_code="missing_feed_url")
+        return CompanyFetchResult(
+            company_id=company_id,
+            error=IngestionIssue(
+                company_id=company_id,
+                company_name=company_name,
+                stage=IssueStage.ROUTING,
+                code=IssueCode.INVALID_FEED_URL,
+                message="The configured feed URL is invalid or unsupported.",
+            ),
+        )
 
     registration = registration_for_feed_url(feed_url)
     if registration is None:
-        logger.warning("Unsupported ATS feed URL for company_id=%s", company_id)
-        return CompanyFetchResult(company_id=company_id, error_code="unsupported_feed_url")
+        logger.warning(
+            "ATS feed rejected run_id=%s company_id=%s code=%s",
+            run_id,
+            company_id,
+            IssueCode.INVALID_FEED_URL,
+        )
+        return CompanyFetchResult(
+            company_id=company_id,
+            error=IngestionIssue(
+                company_id=company_id,
+                company_name=company_name,
+                stage=IssueStage.ROUTING,
+                code=IssueCode.INVALID_FEED_URL,
+                message="The configured feed URL is invalid or unsupported.",
+            ),
+        )
 
     source = registration.source
     # Both objects come from the validated source registry.
@@ -61,16 +155,24 @@ async def _fetch_one(
     except Exception as exc:
         # Source failures are isolated: never abort other company scans and do
         # not put response bodies or job content in logs.
+        issue = _fetch_issue(
+            company_id=company_id,
+            company_name=company_name,
+            provider=source.name,
+            exc=exc,
+        )
         logger.warning(
-            "ATS fetch failed provider=%s company_id=%s error_type=%s",
+            "ATS fetch failed run_id=%s provider=%s company_id=%s code=%s error_type=%s",
+            run_id,
             source.name,
             company_id,
+            issue.code,
             type(exc).__name__,
         )
         return CompanyFetchResult(
             company_id=company_id,
             provider=source.name,
-            error_code="fetch_failed",
+            error=issue,
         )
 
     # A provider occasionally returns the same posting more than once (for
@@ -82,8 +184,9 @@ async def _fetch_one(
             jobs_by_url[job.url] = job
 
     jobs = list(jobs_by_url.values())
-    logger.info(
-        "ATS fetch succeeded provider=%s company_id=%s jobs=%d",
+    logger.debug(
+        "ATS fetch succeeded run_id=%s provider=%s company_id=%s jobs=%d",
+        run_id,
         source.name,
         company_id,
         len(jobs),
@@ -91,12 +194,16 @@ async def _fetch_one(
     return CompanyFetchResult(company_id=company_id, provider=source.name, jobs=jobs)
 
 
-async def fetch_all(companies: list[Company]) -> list[CompanyFetchResult]:
+async def fetch_all(
+    companies: list[Company],
+    *,
+    run_id: UUID | None = None,
+) -> list[CompanyFetchResult]:
     """Fetch all company feeds with global and provider-specific limits."""
     global_sem = asyncio.Semaphore(settings.ats_global_concurrency)
     provider_sems = {
         name: asyncio.Semaphore(registration.concurrency_limit)
         for name, registration in SOURCE_REGISTRY.items()
     }
-    tasks = [_fetch_one(company, global_sem, provider_sems) for company in companies]
+    tasks = [_fetch_one(company, global_sem, provider_sems, run_id=run_id) for company in companies]
     return list(await asyncio.gather(*tasks))
