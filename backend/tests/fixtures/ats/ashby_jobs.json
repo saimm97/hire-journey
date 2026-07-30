@@ -1,0 +1,30 @@
+{
+  "jobs": [
+    {
+      "id": "f65f588e-e4d1-4476-b7af-6c82ef37ec90",
+      "title": "Product Engineer",
+      "jobUrl": "https://jobs.ashbyhq.com/hijfixture/f65f588e-e4d1-4476-b7af-6c82ef37ec90",
+      "location": "Remote",
+      "secondaryLocations": [
+        {
+          "location": "London, UK"
+        }
+      ],
+      "descriptionPlain": "Own important product systems.",
+      "descriptionHtml": "<h2 style=\"color:red\">The role</h2><p>Own <strong>important</strong> product systems.</p><iframe src=\"https://unsafe.example\"></iframe>",
+      "publishedAt": "2026-07-05T12:15:00+00:00",
+      "isListed": true,
+      "compensation": {
+        "summaryComponents": [
+          {
+            "compensationType": "Salary",
+            "minValue": 130000,
+            "maxValue": 175000,
+            "currencyCode": "USD",
+            "interval": "1 YEAR"
+          }
+        ]
+      }
+    }
+  ]
+}
