@@ -26,7 +26,7 @@ semaphores bound concurrent company fetches; provider capacity is acquired first
 so a busy provider cannot reserve idle global slots.
 
 Every pass now returns an ephemeral structured report with a correlation ID,
-timing, safe company-level warnings/errors, and provider source-health summaries.
+timing, safe company-level warnings/errors, and Provider Ingestion Health summaries.
 The CLI renders it for operators or emits complete JSON; no scan history is
 persisted.
 

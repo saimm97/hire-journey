@@ -3,6 +3,7 @@
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import StrEnum
+from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID
 
 
@@ -13,7 +14,7 @@ class RunStatus(StrEnum):
     SKIPPED = "skipped"
 
 
-class SourceStatus(StrEnum):
+class ProviderIngestionHealth(StrEnum):
     HEALTHY = "healthy"
     WARNING = "warning"
     DEGRADED = "degraded"
@@ -43,6 +44,25 @@ class IssueCode(StrEnum):
     EMPTY_FEED = "empty_feed"
 
 
+def sanitize_feed_url(configured_url: str | None) -> str | None:
+    """Remove URL components that must never enter reports or logs."""
+    if not configured_url:
+        return None
+    try:
+        parsed = urlsplit(configured_url.strip())
+        if not parsed.scheme or not parsed.hostname:
+            return None
+        hostname = parsed.hostname
+        if ":" in hostname and not hostname.startswith("["):
+            hostname = f"[{hostname}]"
+        port = parsed.port
+    except (TypeError, ValueError):
+        return None
+
+    netloc = hostname if port is None else f"{hostname}:{port}"
+    return urlunsplit((parsed.scheme.lower(), netloc, parsed.path, "", ""))
+
+
 @dataclass(frozen=True)
 class IngestionIssue:
     stage: IssueStage
@@ -51,18 +71,22 @@ class IngestionIssue:
     company_id: int | None = None
     company_name: str | None = None
     provider: str | None = None
+    feed_url: str | None = None
     exception_type: str | None = None
     http_status: int | None = None
-    retryable: bool = False
+    retry_eligible: bool = False
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "feed_url", sanitize_feed_url(self.feed_url))
 
 
 @dataclass
 class ProviderRunSummary:
     provider: str
-    source_status: SourceStatus = SourceStatus.HEALTHY
-    companies_attempted: int = 0
-    companies_succeeded: int = 0
-    companies_failed: int = 0
+    ingestion_health: ProviderIngestionHealth = ProviderIngestionHealth.HEALTHY
+    feeds_attempted: int = 0
+    feeds_succeeded: int = 0
+    feeds_failed: int = 0
     empty_feeds: int = 0
     persistence_failures: int = 0
     jobs_fetched: int = 0

@@ -17,8 +17,8 @@ from app.services.ingestion_report import (
     IngestionRunFailedError,
     IssueCode,
     IssueStage,
+    ProviderIngestionHealth,
     RunStatus,
-    SourceStatus,
 )
 from app.sources import SOURCES
 from app.sources import base as source_base
@@ -101,7 +101,7 @@ async def test_same_feed_called_twice_upserts_one_job(
     assert first_report.warnings == []
     assert len(first_report.providers) == 1
     assert first_report.providers[0].provider == "greenhouse"
-    assert first_report.providers[0].source_status is SourceStatus.HEALTHY
+    assert first_report.providers[0].ingestion_health is ProviderIngestionHealth.HEALTHY
     assert second_report.jobs_upserted == 1
     assert any(
         record.levelno == logging.INFO
@@ -328,10 +328,11 @@ async def test_empty_feed_is_a_warning_not_a_failed_company(
     assert warning.company_id == company_id
     assert warning.company_name == company_name
     assert warning.provider == "lever"
+    assert warning.feed_url == "https://api.lever.co/v0/postings/pytest-empty"
     assert warning.stage is IssueStage.FETCH
     assert warning.code is IssueCode.EMPTY_FEED
     assert warning.message == "The provider returned a valid feed containing no jobs."
-    assert report.providers[0].source_status is SourceStatus.WARNING
+    assert report.providers[0].ingestion_health is ProviderIngestionHealth.WARNING
     assert report.providers[0].empty_feeds == 1
 
 
@@ -390,11 +391,11 @@ async def test_one_company_fetch_failure_does_not_discard_another(
     assert report.errors[0].code is IssueCode.REQUEST_TIMEOUT
     assert report.errors[0].message == "The provider request timed out."
     assert report.errors[0].exception_type == "TimeoutError"
-    assert report.errors[0].retryable is True
+    assert report.errors[0].retry_eligible is True
     assert report.errors[0].http_status is None
-    assert {summary.provider: summary.source_status for summary in report.providers} == {
-        "ashby": SourceStatus.HEALTHY,
-        "greenhouse": SourceStatus.UNAVAILABLE,
+    assert {summary.provider: summary.ingestion_health for summary in report.providers} == {
+        "ashby": ProviderIngestionHealth.HEALTHY,
+        "greenhouse": ProviderIngestionHealth.UNAVAILABLE,
     }
     failed_count = await db.scalar(
         select(func.count()).select_from(Job).where(Job.company_id == failed_id)
@@ -445,10 +446,58 @@ async def test_provider_is_degraded_when_only_some_source_feeds_fail(
     assert len(report.providers) == 1
     provider = report.providers[0]
     assert provider.provider == "lever"
-    assert provider.source_status is SourceStatus.DEGRADED
-    assert provider.companies_attempted == 2
-    assert provider.companies_succeeded == 1
-    assert provider.companies_failed == 1
+    assert provider.ingestion_health is ProviderIngestionHealth.DEGRADED
+    assert provider.feeds_attempted == 2
+    assert provider.feeds_succeeded == 1
+    assert provider.feeds_failed == 1
+
+
+async def test_known_provider_routing_failure_contributes_to_ingestion_health(
+    db: AsyncSession,
+    create_ingestion_company,
+    monkeypatch,
+):
+    unsafe = await create_ingestion_company(
+        "Unsafe Lever Feed",
+        "http://api.lever.co/v0/postings/pytest-unsafe-lever",
+    )
+    healthy = await create_ingestion_company(
+        "Healthy Lever Feed",
+        "https://api.lever.co/v0/postings/pytest-healthy-lever",
+    )
+    healthy_url = healthy.careers_url
+
+    async def fetch_healthy(url: str, company_name: str) -> list[RawJob]:
+        assert url == healthy_url
+        return [
+            RawJob(
+                title="Platform Engineer",
+                url="https://jobs.lever.co/pytest-healthy-lever/job-1",
+                company=company_name,
+                location="Remote",
+                source_name="lever",
+            )
+        ]
+
+    async def test_companies(_db: AsyncSession) -> list[Company]:
+        return [unsafe, healthy]
+
+    monkeypatch.setattr(SOURCES["lever"], "fetch_url", fetch_healthy)
+    monkeypatch.setattr(company_service, "get_scannable_companies", test_companies)
+
+    report = await search_service.run_scan(db)
+
+    assert report.status is RunStatus.COMPLETED_WITH_ERRORS
+    assert len(report.errors) == 1
+    assert report.errors[0].stage is IssueStage.ROUTING
+    assert report.errors[0].code is IssueCode.INVALID_FEED_URL
+    assert len(report.providers) == 1
+    provider = report.providers[0]
+    assert provider.provider == "lever"
+    assert provider.ingestion_health is ProviderIngestionHealth.DEGRADED
+    assert provider.feeds_attempted == 2
+    assert provider.feeds_succeeded == 1
+    assert provider.feeds_failed == 1
 
 
 async def test_bulk_upsert_chunks_large_boards(
@@ -575,10 +624,11 @@ async def test_persistence_failure_does_not_expire_later_company_results(
     db: AsyncSession,
     create_ingestion_company,
     monkeypatch,
+    caplog,
 ):
     failed = await create_ingestion_company(
         "Persistence Failure ATS",
-        "https://api.lever.co/v0/postings/pytest-persistence-failure",
+        "https://api.lever.co/v0/postings/pytest-persistence-failure" "?token=private#fragment",
     )
     healthy = await create_ingestion_company(
         "Persistence Healthy ATS",
@@ -615,6 +665,7 @@ async def test_persistence_failure_does_not_expire_later_company_results(
     monkeypatch.setattr(SOURCES["lever"], "fetch_url", fetch_one)
     monkeypatch.setattr(company_service, "get_scannable_companies", test_companies)
     monkeypatch.setattr(job_service, "upsert_jobs", fail_first_upsert)
+    caplog.set_level(logging.ERROR, logger=search_service.__name__)
 
     report = await search_service.run_scan(db)
 
@@ -629,18 +680,23 @@ async def test_persistence_failure_does_not_expire_later_company_results(
     assert error.company_id == failed_id
     assert error.company_name == failed_name
     assert error.provider == "lever"
+    assert error.feed_url is not None
+    assert error.feed_url.endswith("/pytest-persistence-failure")
     assert error.stage is IssueStage.PERSISTENCE
     assert error.code is IssueCode.PERSISTENCE_FAILED
     assert error.message == "The fetched jobs could not be persisted."
     assert error.exception_type == "RuntimeError"
     assert "simulated persistence failure" not in error.message
+    assert "feed_url=https://api.lever.co/v0/postings/pytest-persistence-failure" in caplog.text
+    assert "token=private" not in caplog.text
+    assert "#fragment" not in caplog.text
     assert len(report.providers) == 1
     provider = report.providers[0]
     assert provider.provider == "lever"
-    assert provider.source_status is SourceStatus.HEALTHY
-    assert provider.companies_attempted == 2
-    assert provider.companies_succeeded == 2
-    assert provider.companies_failed == 0
+    assert provider.ingestion_health is ProviderIngestionHealth.HEALTHY
+    assert provider.feeds_attempted == 2
+    assert provider.feeds_succeeded == 2
+    assert provider.feeds_failed == 0
     assert provider.persistence_failures == 1
     assert (
         await db.scalar(select(func.count()).select_from(Job).where(Job.company_id == failed_id))

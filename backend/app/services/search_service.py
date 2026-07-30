@@ -26,9 +26,9 @@ from app.services.ingestion_report import (
     IngestionRunReport,
     IssueCode,
     IssueStage,
+    ProviderIngestionHealth,
     ProviderRunSummary,
     RunStatus,
-    SourceStatus,
 )
 
 logger = logging.getLogger(__name__)
@@ -64,26 +64,26 @@ def _finish_report(
         RunStatus.COMPLETED_WITH_ERRORS if report.companies_failed else RunStatus.COMPLETED
     )
     for summary in providers.values():
-        if summary.companies_failed == summary.companies_attempted:
-            summary.source_status = SourceStatus.UNAVAILABLE
-        elif summary.companies_failed:
-            summary.source_status = SourceStatus.DEGRADED
+        if summary.feeds_failed == summary.feeds_attempted:
+            summary.ingestion_health = ProviderIngestionHealth.UNAVAILABLE
+        elif summary.feeds_failed:
+            summary.ingestion_health = ProviderIngestionHealth.DEGRADED
         elif summary.empty_feeds:
-            summary.source_status = SourceStatus.WARNING
+            summary.ingestion_health = ProviderIngestionHealth.WARNING
         else:
-            summary.source_status = SourceStatus.HEALTHY
+            summary.ingestion_health = ProviderIngestionHealth.HEALTHY
     report.providers = sorted(providers.values(), key=lambda item: item.provider)
     for summary in report.providers:
         logger.info(
-            "ATS ingestion provider summary run_id=%s provider=%s source_status=%s "
-            "companies_attempted=%d companies_succeeded=%d companies_failed=%d "
+            "ATS ingestion provider summary run_id=%s provider=%s ingestion_health=%s "
+            "feeds_attempted=%d feeds_succeeded=%d feeds_failed=%d "
             "empty_feeds=%d persistence_failures=%d jobs_fetched=%d jobs_upserted=%d",
             report.run_id,
             summary.provider,
-            summary.source_status,
-            summary.companies_attempted,
-            summary.companies_succeeded,
-            summary.companies_failed,
+            summary.ingestion_health,
+            summary.feeds_attempted,
+            summary.feeds_succeeded,
+            summary.feeds_failed,
             summary.empty_feeds,
             summary.persistence_failures,
             summary.jobs_fetched,
@@ -165,23 +165,24 @@ async def _execute_scan(
                 fetch_result.provider,
                 ProviderRunSummary(provider=fetch_result.provider),
             )
-            provider_summary.companies_attempted += 1
+            provider_summary.feeds_attempted += 1
         if not fetch_result.succeeded:
             report.companies_failed += 1
             if fetch_result.error is not None:
                 report.errors.append(fetch_result.error)
             if provider_summary is not None:
-                provider_summary.companies_failed += 1
+                provider_summary.feeds_failed += 1
             continue
         report.jobs_fetched += len(fetch_result.jobs)
         if provider_summary is not None:
-            provider_summary.companies_succeeded += 1
+            provider_summary.feeds_succeeded += 1
             provider_summary.jobs_fetched += len(fetch_result.jobs)
         if not fetch_result.jobs:
             warning = IngestionIssue(
                 company_id=fetch_result.company_id,
                 company_name=company_names.get(fetch_result.company_id),
                 provider=fetch_result.provider,
+                feed_url=fetch_result.feed_url,
                 stage=IssueStage.FETCH,
                 code=IssueCode.EMPTY_FEED,
                 message="The provider returned a valid feed containing no jobs.",
@@ -191,11 +192,12 @@ async def _execute_scan(
             if provider_summary is not None:
                 provider_summary.empty_feeds += 1
             logger.warning(
-                "ATS feed empty run_id=%s provider=%s company_id=%s code=%s",
+                "ATS feed empty run_id=%s provider=%s company_id=%s code=%s feed_url=%s",
                 report.run_id,
                 fetch_result.provider,
                 fetch_result.company_id,
                 warning.code,
+                fetch_result.feed_url,
             )
         try:
             jobs = await job_service.upsert_jobs(
@@ -210,6 +212,7 @@ async def _execute_scan(
                 company_id=fetch_result.company_id,
                 company_name=company_names.get(fetch_result.company_id),
                 provider=fetch_result.provider,
+                feed_url=fetch_result.feed_url,
                 stage=IssueStage.PERSISTENCE,
                 code=IssueCode.PERSISTENCE_FAILED,
                 message="The fetched jobs could not be persisted.",
@@ -221,10 +224,11 @@ async def _execute_scan(
             # scheduler logs. The company and exception type are sufficient
             # to identify and isolate the failed batch safely.
             logger.error(
-                "ATS persistence failed run_id=%s company_id=%s error_type=%s",
+                "ATS persistence failed run_id=%s company_id=%s error_type=%s feed_url=%s",
                 report.run_id,
                 fetch_result.company_id,
                 issue.exception_type,
+                fetch_result.feed_url,
             )
             report.companies_failed += 1
             if provider_summary is not None:

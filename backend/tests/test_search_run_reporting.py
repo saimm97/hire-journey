@@ -31,6 +31,7 @@ def _report(status: RunStatus) -> IngestionRunReport:
                 company_id=42,
                 company_name="Internal Company",
                 provider="greenhouse",
+                feed_url=("https://boards-api.greenhouse.io/v1/boards/internal-company/jobs"),
                 stage=IssueStage.FETCH,
                 code=IssueCode.PROVIDER_HTTP_ERROR,
                 message="The provider feed returned HTTP 404.",
@@ -52,6 +53,7 @@ async def test_search_run_keeps_operator_details_out_of_the_response(client, mon
     assert response.json() == {"total_jobs_fetched": 7}
     assert "Internal Company" not in response.text
     assert "provider_http_error" not in response.text
+    assert "internal-company/jobs" not in response.text
     assert "b61a8a82" not in response.text
 
 

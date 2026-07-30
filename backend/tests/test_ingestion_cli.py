@@ -11,9 +11,9 @@ from app.services.ingestion_report import (
     IngestionRunReport,
     IssueCode,
     IssueStage,
+    ProviderIngestionHealth,
     ProviderRunSummary,
     RunStatus,
-    SourceStatus,
 )
 from scripts import ingest_jobs as ingestion_cli
 from scripts.ingest_jobs import exit_code_for, render_human, render_json
@@ -37,10 +37,10 @@ def _report(status: RunStatus = RunStatus.COMPLETED_WITH_ERRORS) -> IngestionRun
         providers=[
             ProviderRunSummary(
                 provider="greenhouse",
-                source_status=SourceStatus.DEGRADED,
-                companies_attempted=3,
-                companies_succeeded=1,
-                companies_failed=2,
+                ingestion_health=ProviderIngestionHealth.DEGRADED,
+                feeds_attempted=3,
+                feeds_succeeded=1,
+                feeds_failed=2,
                 empty_feeds=1,
                 jobs_fetched=20,
                 jobs_upserted=20,
@@ -51,6 +51,7 @@ def _report(status: RunStatus = RunStatus.COMPLETED_WITH_ERRORS) -> IngestionRun
                 company_id=3,
                 company_name="Empty Co",
                 provider="greenhouse",
+                feed_url="https://boards-api.greenhouse.io/v1/boards/empty-co/jobs",
                 stage=IssueStage.FETCH,
                 code=IssueCode.EMPTY_FEED,
                 message="The provider returned a valid feed containing no jobs.",
@@ -61,6 +62,7 @@ def _report(status: RunStatus = RunStatus.COMPLETED_WITH_ERRORS) -> IngestionRun
                 company_id=1,
                 company_name="Anthropic",
                 provider="greenhouse",
+                feed_url="https://boards-api.greenhouse.io/v1/boards/example-one/jobs",
                 stage=IssueStage.FETCH,
                 code=IssueCode.PROVIDER_HTTP_ERROR,
                 message="The provider feed returned HTTP 404.",
@@ -71,6 +73,7 @@ def _report(status: RunStatus = RunStatus.COMPLETED_WITH_ERRORS) -> IngestionRun
                 company_id=2,
                 company_name="Acme",
                 provider="greenhouse",
+                feed_url="https://boards-api.greenhouse.io/v1/boards/example-two/jobs",
                 stage=IssueStage.FETCH,
                 code=IssueCode.PROVIDER_HTTP_ERROR,
                 message="The provider feed returned HTTP 404.",
@@ -89,9 +92,32 @@ def test_json_output_contains_the_complete_structured_report():
     assert payload["started_at"] == "2026-07-30T08:00:00Z"
     assert payload["finished_at"] == "2026-07-30T08:01:42Z"
     assert payload["duration_ms"] == 102000
-    assert payload["providers"][0]["source_status"] == "degraded"
-    assert payload["warnings"][0]["code"] == "empty_feed"
+    assert payload["providers"][0] == {
+        "provider": "greenhouse",
+        "ingestion_health": "degraded",
+        "feeds_attempted": 3,
+        "feeds_succeeded": 1,
+        "feeds_failed": 2,
+        "empty_feeds": 1,
+        "persistence_failures": 0,
+        "jobs_fetched": 20,
+        "jobs_upserted": 20,
+    }
+    assert payload["warnings"][0] == {
+        "stage": "fetch",
+        "code": "empty_feed",
+        "message": "The provider returned a valid feed containing no jobs.",
+        "company_id": 3,
+        "company_name": "Empty Co",
+        "provider": "greenhouse",
+        "feed_url": "https://boards-api.greenhouse.io/v1/boards/empty-co/jobs",
+        "exception_type": None,
+        "http_status": None,
+        "retry_eligible": False,
+    }
+    assert payload["errors"][0]["feed_url"].endswith("/example-one/jobs")
     assert payload["errors"][0]["http_status"] == 404
+    assert "retryable" not in payload["errors"][0]
 
 
 def test_human_output_groups_repeated_company_failures():
@@ -103,9 +129,11 @@ def test_human_output_groups_repeated_company_failures():
     assert "Companies: 3 attempted, 1 succeeded, 2 failed, 1 empty" in output
     assert "Jobs: 20 fetched, 20 upserted" in output
     assert "greenhouse" in output
-    assert "source=degraded" in output
+    assert "health=degraded" in output
+    assert "feeds=3" in output
     assert "greenhouse / provider_http_error (2)" in output
     assert "Anthropic: The provider feed returned HTTP 404." in output
+    assert "feed: https://boards-api.greenhouse.io/v1/boards/example-one/jobs" in output
     assert "Acme: The provider feed returned HTTP 404." in output
     assert "Warnings:" in output
     assert "Empty Co: The provider returned a valid feed containing no jobs." in output

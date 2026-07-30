@@ -111,6 +111,15 @@ def registration_for_feed_url(url: str) -> SourceRegistration | None:
     return _FEED_HOST_INDEX.get(host)
 
 
+def registration_for_feed_host(url: str) -> SourceRegistration | None:
+    """Identify a known feed host for diagnostics, without authorizing a request."""
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except (TypeError, ValueError):
+        return None
+    return _FEED_HOST_INDEX.get(host)
+
+
 def source_for_feed_url(url: str) -> JobSource | None:
     """Resolve a stored ATS feed URL to exactly one allowlisted adapter."""
     registration = registration_for_feed_url(url)

@@ -85,16 +85,16 @@ of scheduled ingestion.
 A successful command prints an operator report similar to:
 
 ```text
-Run: b61a8a82-68b0-4e40-a994-1cb27523ff22
+Run: 00000000-0000-4000-8000-000000000001
 Status: completed
-Duration: 1m 42s
-Companies: 225 attempted, 225 succeeded, 0 failed, 1 empty
-Jobs: 20,341 fetched, 20,341 upserted
+Duration: 12s
+Companies: 6 attempted, 6 succeeded, 0 failed, 1 empty
+Jobs: 36 fetched, 36 upserted
 
 Provider summary:
-  greenhouse: source=healthy, companies=120, jobs=12,430, source_failures=0, persistence_failures=0
-  ashby: source=warning, companies=60, jobs=5,201, source_failures=0, persistence_failures=0
-  lever: source=healthy, companies=45, jobs=2,710, source_failures=0, persistence_failures=0
+  greenhouse: health=healthy, feeds=3, jobs=24, feed_failures=0, persistence_failures=0
+  ashby: health=warning, feeds=2, jobs=8, feed_failures=0, persistence_failures=0
+  lever: health=healthy, feeds=1, jobs=4, feed_failures=0, persistence_failures=0
 ```
 
 The upserted count is not the number of newly inserted jobs: existing URL
@@ -105,6 +105,11 @@ For the complete machine-readable report, including every warning and error:
 ```bash
 python scripts/ingest_jobs.py --json
 ```
+
+JSON is the standard internal operational contract. Its complete field
+reference, compatibility policy, status rules, and fabricated example are in
+the [Ingestion Run Report contract](../contracts/ingestion-run-report.md).
+Human output is for operator readability only.
 
 `completed` and `skipped` exit with status `0`. `completed_with_errors` and
 fatal `failed` runs print their reports and exit with status `1`, allowing shell
@@ -120,6 +125,10 @@ a report with `Status: skipped` and exits without contacting providers.
 
 Reports and run IDs are not stored in PostgreSQL. They remain available only in
 the command output and whatever retention is configured for backend logs.
+
+Company issues include a sanitized feed URL in JSON, human output, and failure
+logs. It retains the provider hostname and board path for diagnosis while
+removing credentials, query parameters, and fragments.
 
 ## Inspect the result
 
@@ -192,6 +201,7 @@ pytest \
   tests/test_provider_ingestion.py \
   tests/test_job_ingestion.py \
   tests/test_ingestion_cli.py \
+  tests/test_ingestion_report.py \
   tests/test_search_run_reporting.py \
   tests/test_fetch_json.py \
   tests/test_fetch_service.py \
@@ -233,8 +243,20 @@ ORDER BY name;
 
 Then check the backend output for unsupported URLs, HTTP failures, malformed
 responses, or persistence errors. A healthy provider can also legitimately
-return an empty board. Structured run reporting and feed-health classification
-are not implemented yet.
+return an empty board. The report classifies that outcome as a warning and
+lists the affected company without failing the run.
+
+### The command exits with status 1 after upserting jobs
+
+`completed_with_errors` means usable company results were committed while one
+or more company issues require attention. It deliberately exits with status
+`1`; it does not mean the successful results were rolled back. Inspect the
+grouped issue codes and sanitized feed URLs before deciding whether a later run
+may recover automatically or the company configuration needs correction.
+
+`retry_eligible: true` means the failure category qualified for automatic retry
+during this run. The configured attempts have already completed; the flag does
+not instruct an operator to rerun immediately.
 
 ### A company is not scanned
 
@@ -244,7 +266,7 @@ supported provider, or inspect whether the provider and slug in
 
 ### The command appears slower during provider errors
 
-Retryable transport and server failures are attempted up to
+Retry-eligible transport and server failures are attempted up to
 `ATS_MAX_ATTEMPTS`. Retry backoff intentionally retains the provider and global
 concurrency permits so one degraded ATS cannot create an unbounded retry storm.
 

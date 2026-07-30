@@ -102,11 +102,37 @@ async def test_unroutable_feed_uses_the_invalid_url_taxonomy():
     assert result.error.message == "The configured feed URL is invalid or unsupported."
 
 
+async def test_unsafe_known_provider_feed_is_attributed_without_leaking_credentials(
+    caplog,
+):
+    company = Company(
+        id=10,
+        name="Unsafe Lever URL",
+        slug="unsafe-lever-url",
+        careers_url=(
+            "http://operator:private@api.lever.co:8080/v0/postings/example"
+            "?token=private#fragment"
+        ),
+    )
+    caplog.set_level(logging.WARNING, logger=fetch_service.__name__)
+
+    result = (await fetch_service.fetch_all([company]))[0]
+
+    assert not result.succeeded
+    assert result.provider == "lever"
+    assert result.error is not None
+    assert result.error.code is IssueCode.INVALID_FEED_URL
+    assert result.error.feed_url == "http://api.lever.co:8080/v0/postings/example"
+    assert "feed_url=http://api.lever.co:8080/v0/postings/example" in caplog.text
+    assert "operator" not in caplog.text
+    assert "token=private" not in caplog.text
+
+
 _REQUEST = httpx.Request("GET", "https://api.lever.co/v0/postings/acme")
 
 
 @pytest.mark.parametrize(
-    ("provider_error", "code", "stage", "message", "http_status", "retryable"),
+    ("provider_error", "code", "stage", "message", "http_status", "retry_eligible"),
     [
         (
             httpx.ConnectError("private connection detail", request=_REQUEST),
@@ -193,13 +219,13 @@ async def test_fetch_failures_use_safe_stable_taxonomy(
     stage,
     message,
     http_status,
-    retryable,
+    retry_eligible,
 ):
     company = Company(
         id=42,
         name="Acme",
         slug="acme",
-        careers_url="https://api.lever.co/v0/postings/acme",
+        careers_url=("https://api.lever.co/v0/postings/acme?include=jobs&token=private#fragment"),
     )
 
     async def fail_fetch(_url: str, _company_name: str):
@@ -214,9 +240,33 @@ async def test_fetch_failures_use_safe_stable_taxonomy(
     assert result.error.company_id == 42
     assert result.error.company_name == "Acme"
     assert result.error.provider == "lever"
+    assert result.error.feed_url == "https://api.lever.co/v0/postings/acme"
     assert result.error.code is code
     assert result.error.stage is stage
     assert result.error.message == message
     assert result.error.http_status == http_status
-    assert result.error.retryable is retryable
+    assert result.error.retry_eligible is retry_eligible
     assert "private" not in result.error.message
+
+
+async def test_failure_log_contains_only_the_sanitized_feed_url(monkeypatch, caplog):
+    company = Company(
+        id=44,
+        name="Safe Logging",
+        slug="safe-logging",
+        careers_url=("https://api.lever.co/v0/postings/safe-logging?token=private#fragment"),
+    )
+
+    async def fail_fetch(_url: str, _company_name: str):
+        raise TimeoutError("private provider detail")
+
+    monkeypatch.setattr(SOURCES["lever"], "fetch_url", fail_fetch)
+    caplog.set_level(logging.WARNING, logger=fetch_service.__name__)
+
+    await fetch_service.fetch_all([company])
+
+    output = caplog.text
+    assert "feed_url=https://api.lever.co/v0/postings/safe-logging" in output
+    assert "token=private" not in output
+    assert "#fragment" not in output
+    assert "private provider detail" not in output

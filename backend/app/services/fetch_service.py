@@ -14,8 +14,17 @@ import httpx
 
 from app.config import settings
 from app.models.company import Company
-from app.services.ingestion_report import IngestionIssue, IssueCode, IssueStage
-from app.sources import SOURCE_REGISTRY, registration_for_feed_url
+from app.services.ingestion_report import (
+    IngestionIssue,
+    IssueCode,
+    IssueStage,
+    sanitize_feed_url,
+)
+from app.sources import (
+    SOURCE_REGISTRY,
+    registration_for_feed_host,
+    registration_for_feed_url,
+)
 from app.sources.base import (
     ATSInvalidFeedError,
     ATSInvalidJSONError,
@@ -30,6 +39,7 @@ logger = logging.getLogger(__name__)
 class CompanyFetchResult:
     company_id: int
     provider: str | None = None
+    feed_url: str | None = None
     jobs: list[RawJob] = field(default_factory=list)
     error: IngestionIssue | None = None
 
@@ -47,10 +57,11 @@ def _fetch_issue(
     company_id: int,
     company_name: str,
     provider: str,
+    feed_url: str | None,
     exc: Exception,
 ) -> IngestionIssue:
     http_status = None
-    retryable = False
+    retry_eligible = False
     stage = IssueStage.FETCH
     if isinstance(exc, ATSResponseTooLargeError):
         code = IssueCode.RESPONSE_TOO_LARGE
@@ -66,21 +77,21 @@ def _fetch_issue(
     elif isinstance(exc, (TimeoutError, httpx.TimeoutException)):
         code = IssueCode.REQUEST_TIMEOUT
         message = "The provider request timed out."
-        retryable = True
+        retry_eligible = True
     elif isinstance(exc, httpx.HTTPStatusError):
         http_status = exc.response.status_code
         if http_status == 429:
             code = IssueCode.RATE_LIMITED
             message = "The provider rate limit was exhausted after retries."
-            retryable = True
+            retry_eligible = True
         else:
             code = IssueCode.PROVIDER_HTTP_ERROR
             message = f"The provider feed returned HTTP {http_status}."
-            retryable = http_status in {500, 502, 503, 504}
+            retry_eligible = http_status in {500, 502, 503, 504}
     elif isinstance(exc, httpx.TransportError):
         code = IssueCode.CONNECTION_FAILED
         message = "The provider connection failed."
-        retryable = True
+        retry_eligible = True
     else:
         code = IssueCode.UNEXPECTED_FETCH_ERROR
         message = "The provider feed could not be fetched."
@@ -89,12 +100,13 @@ def _fetch_issue(
         company_id=company_id,
         company_name=company_name,
         provider=provider,
+        feed_url=feed_url,
         stage=stage,
         code=code,
         message=message,
         exception_type=type(exc).__name__,
         http_status=http_status,
-        retryable=retryable,
+        retry_eligible=retry_eligible,
     )
 
 
@@ -111,12 +123,15 @@ async def _fetch_one(
     company_id = company.id
     company_name = company.name
     feed_url = company.careers_url
+    safe_feed_url = sanitize_feed_url(feed_url)
     if not feed_url:
         return CompanyFetchResult(
             company_id=company_id,
+            feed_url=safe_feed_url,
             error=IngestionIssue(
                 company_id=company_id,
                 company_name=company_name,
+                feed_url=safe_feed_url,
                 stage=IssueStage.ROUTING,
                 code=IssueCode.INVALID_FEED_URL,
                 message="The configured feed URL is invalid or unsupported.",
@@ -125,17 +140,27 @@ async def _fetch_one(
 
     registration = registration_for_feed_url(feed_url)
     if registration is None:
+        diagnostic_registration = registration_for_feed_host(feed_url)
+        provider = (
+            diagnostic_registration.source.name if diagnostic_registration is not None else None
+        )
         logger.warning(
-            "ATS feed rejected run_id=%s company_id=%s code=%s",
+            "ATS feed rejected run_id=%s provider=%s company_id=%s code=%s feed_url=%s",
             run_id,
+            provider,
             company_id,
             IssueCode.INVALID_FEED_URL,
+            safe_feed_url,
         )
         return CompanyFetchResult(
             company_id=company_id,
+            provider=provider,
+            feed_url=safe_feed_url,
             error=IngestionIssue(
                 company_id=company_id,
                 company_name=company_name,
+                provider=provider,
+                feed_url=safe_feed_url,
                 stage=IssueStage.ROUTING,
                 code=IssueCode.INVALID_FEED_URL,
                 message="The configured feed URL is invalid or unsupported.",
@@ -159,19 +184,23 @@ async def _fetch_one(
             company_id=company_id,
             company_name=company_name,
             provider=source.name,
+            feed_url=safe_feed_url,
             exc=exc,
         )
         logger.warning(
-            "ATS fetch failed run_id=%s provider=%s company_id=%s code=%s error_type=%s",
+            "ATS fetch failed run_id=%s provider=%s company_id=%s code=%s "
+            "error_type=%s feed_url=%s",
             run_id,
             source.name,
             company_id,
             issue.code,
             type(exc).__name__,
+            safe_feed_url,
         )
         return CompanyFetchResult(
             company_id=company_id,
             provider=source.name,
+            feed_url=safe_feed_url,
             error=issue,
         )
 
@@ -191,7 +220,12 @@ async def _fetch_one(
         company_id,
         len(jobs),
     )
-    return CompanyFetchResult(company_id=company_id, provider=source.name, jobs=jobs)
+    return CompanyFetchResult(
+        company_id=company_id,
+        provider=source.name,
+        feed_url=safe_feed_url,
+        jobs=jobs,
+    )
 
 
 async def fetch_all(

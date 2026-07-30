@@ -53,6 +53,8 @@ def _render_issues(title: str, issues: list[IngestionIssue]) -> list[str]:
         for issue in group:
             subject = issue.company_name or "Run"
             lines.append(f"    - {subject}: {issue.message}")
+            if issue.feed_url:
+                lines.append(f"      feed: {issue.feed_url}")
     return lines
 
 
@@ -72,9 +74,9 @@ def render_human(report: IngestionRunReport) -> str:
         lines.extend(["", "Provider summary:"])
         for provider in report.providers:
             lines.append(
-                f"  {provider.provider}: source={provider.source_status.value}, "
-                f"companies={provider.companies_attempted}, jobs={provider.jobs_fetched}, "
-                f"source_failures={provider.companies_failed}, "
+                f"  {provider.provider}: health={provider.ingestion_health.value}, "
+                f"feeds={provider.feeds_attempted}, jobs={provider.jobs_fetched}, "
+                f"feed_failures={provider.feeds_failed}, "
                 f"persistence_failures={provider.persistence_failures}"
             )
     warning_lines = _render_issues("Warnings", report.warnings)
