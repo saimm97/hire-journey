@@ -18,6 +18,9 @@ with it safely.
 - [Job ingestion architecture](architecture/job-ingestion.md) — provider
   Adapters, bounded fetching, sanitization, URL-idempotent persistence, and
   current limitations.
+- [Ingestion Run Report contract](contracts/ingestion-run-report.md) — normative
+  internal JSON schema, run status, provider ingestion health, issue taxonomy,
+  safe diagnostic fields, and compatibility rules.
 - [Run job ingestion locally](runbooks/job-ingestion.md) — database setup,
   company seeding, manual ingestion, verification, tests, and troubleshooting.
 - [ADR-0001: Profile-centred onboarding schema](adr/0001-profile-centered-onboarding-schema.md)
@@ -40,6 +43,7 @@ Update the relevant documentation in the same pull request when a change:
 - adds, removes, or renames a table, column, relationship, or constraint;
 - changes a business rule or where that rule is enforced;
 - introduces a migration with operational or data-loss consequences;
+- changes an internal operational contract consumed by automation;
 - accepts or reverses an architectural decision;
 - changes the status of an onboarding milestone; or
 - changes the shared visual tokens, interaction hierarchy, navigation, or

@@ -4,6 +4,8 @@ This document describes the current, schema-free job-ingestion Module. For the
 commands used to operate it locally, see the
 [job-ingestion runbook](../runbooks/job-ingestion.md). For planned ingestion and
 matching work, see the [ingestion and matching roadmap](ingestion-matching-roadmap.md).
+The normative machine-readable reporting interface is defined by the
+[Ingestion Run Report contract](../contracts/ingestion-run-report.md).
 
 ## Purpose and scope
 
@@ -38,9 +40,18 @@ PostgreSQL advisory lock, creates its own database session, and calls
 `run_scan()`. Callers therefore do not need to know about individual providers,
 HTTP clients, concurrency controls, parsing, sanitization, or upsert behavior.
 
-`run_scan_locked()` currently returns one integer: the number of jobs fetched
-and successfully upserted during the run. It does not distinguish new rows from
-existing rows that were refreshed.
+`run_scan_locked()` returns an ephemeral `IngestionRunReport`. The report carries
+a correlation ID, timing, run status, provider ingestion health, aggregate
+counts, empty-feed warnings, and safe company-level errors. Its summaries and
+issues are emitted to operator logs, and no scan-history row is persisted.
+
+The JSON form is a compatibility-managed internal operational contract. It is
+intended for backend operators, automation, and future administrative tooling;
+it is not returned to job seekers. Human CLI output is a convenience view, not
+the contract.
+
+The report distinguishes jobs fetched from jobs successfully upserted, but it
+does not distinguish new rows from existing rows that were refreshed.
 
 ## Processing flow
 
@@ -144,13 +155,13 @@ The checked-in defaults are suitable for local development.
 | --- | ---: | --- |
 | `ATS_HTTP_TIMEOUT_SECONDS` | `10` | HTTP timeout per operation |
 | `ATS_MAX_RESPONSE_MB` | `50` | Maximum decoded response body per company feed |
-| `ATS_MAX_ATTEMPTS` | `3` | Maximum attempts for retryable failures |
+| `ATS_MAX_ATTEMPTS` | `3` | Maximum attempts for retry-eligible failures |
 | `ATS_GLOBAL_CONCURRENCY` | `12` | Maximum active ATS requests across providers |
 | `ATS_HTTP_MAX_CONNECTIONS` | `20` | Shared HTTP connection-pool limit |
 | `ATS_HTTP_MAX_KEEPALIVE_CONNECTIONS` | `10` | Reusable idle connections retained in the pool |
 
-Provider concurrency limits, retryable statuses, redirect bounds, and parsing
-rules remain code-level policy rather than deployment configuration.
+Provider concurrency limits, retry-eligible statuses, redirect bounds, and
+parsing rules remain code-level policy rather than deployment configuration.
 
 ## Failure isolation
 
@@ -163,6 +174,19 @@ The advisory lock prevents two application processes from running global
 ingestion simultaneously against the same PostgreSQL database. It complements
 the in-process concurrency controls; it does not replace them.
 
+Completed runs use one of four statuses: `completed`,
+`completed_with_errors`, `failed`, or `skipped`. Provider ingestion health is
+derived independently as `healthy`, `warning`, `degraded`, or `unavailable`.
+It summarizes Hire Journey's configured feed outcomes, not ATS platform uptime.
+Persistence failures degrade the run without falsely marking an external source
+as unhealthy.
+
+Error reports use stable provider-independent codes and safe messages. They can
+include a sanitized feed URL, exception type, HTTP status, and retry-policy
+eligibility, but never provider response bodies, job descriptions, database
+parameters, raw URLs, or raw exception messages. See the contract document for
+the complete schema, status semantics, taxonomy, and compatibility rules.
+
 ## Verification
 
 The ingestion tests cover:
@@ -173,18 +197,26 @@ The ingestion tests cover:
 - response streaming, size limits, redirects, retries, and connection cleanup;
 - provider registration and host routing;
 - provider fetch and persistence failure isolation;
+- run status, provider ingestion health, safe error taxonomy, and empty-feed
+  warnings;
+- sanitized diagnostic feed URLs and report-field compatibility;
+- advisory-lock skip and fatal-run behavior;
+- human-readable and JSON operator output;
+- nonzero exit behavior for partial and fatal failures;
+- preservation of the public `/search/run` response contract;
 - salary extraction and successful-snapshot replacement;
 - bulk-upsert chunking; and
 - persistence failure isolation.
 
 See `backend/tests/test_provider_ingestion.py`, `test_job_ingestion.py`,
-`test_fetch_json.py`, `test_fetch_service.py`, and `test_sources.py`.
+`test_ingestion_cli.py`, `test_ingestion_report.py`,
+`test_search_run_reporting.py`, `test_fetch_json.py`, `test_fetch_service.py`,
+and `test_sources.py`.
 
 ## Known gaps
 
 The current implementation intentionally leaves these items open:
 
-- structured run outcomes and provider-level counters (HIJ-14);
 - twice-daily scheduling (HIJ-15);
 - bounded incremental fetch-and-persist workers instead of retaining every
   company result until all fetching completes;
