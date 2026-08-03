@@ -44,3 +44,7 @@ langchain-openai==0.3.35
 
 # Utilities
 pyyaml==6.0.2
+
+
+#scheduling
+celery[redis]==5.6.3
