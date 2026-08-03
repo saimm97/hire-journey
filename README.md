@@ -5,6 +5,7 @@ End-to-end AI-powered job search platform. Upload your resume, discover relevant
 ## Stack
 
 - **Backend:** FastAPI, SQLAlchemy 2.0 (async), Alembic, PostgreSQL
+- **Background jobs:** Celery with Redis as broker and result backend
 - **AI:** LangGraph agents
 - **Job Sources:** Greenhouse, Ashby, Lever  (ATS Job Boards, free-to-use)
 - **Frontend:** static HTML/CSS/JS (sign-in/up, CV upload); Next.js planned
@@ -13,7 +14,8 @@ End-to-end AI-powered job search platform. Upload your resume, discover relevant
 
 ## Prerequisites
 
-- Python 3.13 (3.11–3.13 supported; **3.14 is not yet supported** — several dependencies have no wheels for it and fail to build)
+- Python 3.13 (**3.14 is not yet supported** — several dependencies have no
+  wheels for it and fail to build)
 - Docker
 - Git
 
@@ -78,19 +80,41 @@ docker ps
 
 
 
-### 4. Configure environment
+### 4. Start Redis
+
+Redis carries Celery task messages and short-lived task results. Run this once;
+Docker preserves its data in a named volume:
 
 ```bash
-cd backend
-cp .env.example .env
+docker run -d \
+  --name hire-journey-redis \
+  -p 127.0.0.1:6379:6379 \
+  -v hire-journey-redis-data:/data \
+  redis:8-alpine \
+  redis-server --appendonly yes
 ```
 
-Open `.env` and fill in:
+Verify the scheduler broker is reachable:
+
+```bash
+docker exec hire-journey-redis redis-cli ping
+# PONG
+```
+
+### 5. Configure environment
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+Open `backend/.env` and fill in:
 
 ```env
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/career_engine
 SECRET_KEY=<generate one below>
 GEMINI_API_KEY=<your Gemini API key>
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/1
 ```
 
 Generate a secret key:
@@ -101,7 +125,7 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 
 
 
-### 5. Install dependencies
+### 6. Install dependencies
 
 ```bash
 cd backend
@@ -112,7 +136,7 @@ pip install -r requirements-dev.txt
 
 
 
-### 6. Run migrations
+### 7. Run migrations
 
 Migrations are committed to the repo, so a fresh setup only needs to apply them:
 
@@ -122,7 +146,7 @@ alembic upgrade head
 
 (You only run `alembic revision --autogenerate` later, after changing a model — see [Day-to-day commands](#day-to-day-commands).)
 
-### 7. Start the backend
+### 8. Start the backend
 
 ```bash
 uvicorn app.main:app --reload
@@ -131,7 +155,51 @@ uvicorn app.main:app --reload
 Server runs at [http://localhost:8000](http://localhost:8000)
 Interactive API docs at [http://localhost:8000/docs](http://localhost:8000/docs)
 
-### 8. Start the frontend
+### 9. Start scheduled job ingestion
+
+Scheduled ingestion is not hosted inside FastAPI. Keep two additional backend
+processes running: one worker that executes ingestion tasks and exactly one Beat
+process that publishes them. Both commands must run from `backend/` with the
+virtual environment active.
+
+Terminal 1 — ingestion worker:
+
+```bash
+celery \
+  -A app.celery_app:celery_app \
+  worker \
+  --loglevel=INFO \
+  --queues=ingestion \
+  --pool=solo
+```
+
+Terminal 2 — scheduler:
+
+```bash
+celery -A app.celery_app:celery_app beat --loglevel=INFO
+```
+
+Beat publishes a global scan at `07:00` and `15:00` UTC. It does not run a scan
+immediately on startup; use `python scripts/ingest_jobs.py` when an operator needs
+an immediate or recovery run. The PostgreSQL advisory lock safely skips either
+entry point when another scan is already active.
+
+The prerequisites for successful scheduled ingestion are:
+
+- PostgreSQL is reachable, migrated, and contains companies with non-null
+  `careers_url` values;
+- Redis is reachable at the configured broker and result-backend URLs;
+- at least one worker is consuming the `ingestion` queue;
+- exactly one Beat process owns the schedule;
+- the worker has the same backend environment as FastAPI and outbound HTTPS
+  access to the supported ATS hosts; and
+- the machine clock is accurate because the schedule is evaluated in UTC.
+
+FastAPI and the frontend may be stopped while scheduled ingestion runs. See the
+[job-ingestion runbook](docs/runbooks/job-ingestion.md) for verification,
+production topology, and troubleshooting.
+
+### 10. Start the frontend
 
 The frontend is static — no build step. Serve it from its own directory in a second terminal:
 
@@ -211,6 +279,19 @@ docker stop career-engine-db
 # start it again next session
 docker start career-engine-db
 
+# start/stop the Celery broker
+docker start hire-journey-redis
+docker stop hire-journey-redis
+
+# run the ingestion worker (from backend/ with .venv active)
+celery -A app.celery_app:celery_app worker -l INFO -Q ingestion --pool=solo
+
+# run exactly one scheduler process
+celery -A app.celery_app:celery_app beat -l INFO
+
+# operator-controlled immediate ingestion fallback
+python scripts/ingest_jobs.py
+
 # after changing a model, generate and apply a migration
 alembic revision --autogenerate -m "describe the change"
 alembic upgrade head
@@ -229,7 +310,8 @@ pytest
 - [End-to-end user onboarding flow](docs/architecture/user-onboarding-flow.md)
 - [Current database schema and ERD](docs/architecture/database-schema.md)
 - [Job ingestion architecture](docs/architecture/job-ingestion.md)
-- [Run job ingestion locally](docs/runbooks/job-ingestion.md)
+- [Operate scheduled job ingestion](docs/runbooks/job-ingestion.md)
+- [ADR-0004: Schedule ingestion with Celery and Redis](docs/adr/0004-celery-redis-ingestion-scheduling.md)
 - [Architecture decisions](docs/adr/)
 
 Update the relevant documentation in the same pull request as schema or
@@ -252,6 +334,8 @@ career-engine/
 │   │   ├── services/      # Business logic
 │   │   ├── sources/       # ATS job source adapters
 │   │   ├── agents/        # LangGraph agents
+│   │   ├── tasks/         # Celery delivery adapters
+│   │   ├── celery_app.py  # Celery routing and Beat schedule
 │   │   ├── config.py      # App settings
 │   │   ├── database.py    # DB engine and session
 │   │   └── main.py        # FastAPI entry point
@@ -283,6 +367,8 @@ career-engine/
 | `ATS_GLOBAL_CONCURRENCY`      | No       | Maximum concurrent company fetches, default 12                    |
 | `ATS_HTTP_MAX_CONNECTIONS`    | No       | Shared ATS HTTP connection-pool limit, default 20                 |
 | `ATS_HTTP_MAX_KEEPALIVE_CONNECTIONS` | No | Shared ATS keep-alive pool limit, default 10                  |
+| `CELERY_BROKER_URL`           | No       | Redis broker URL, default `redis://localhost:6379/0`               |
+| `CELERY_RESULT_BACKEND`       | No       | Redis result URL, default `redis://localhost:6379/1`               |
 | `GEMINI_API_KEY`              | Yes      | Gemini API key for AI features                                    |
 | `OPENAI_API_KEY`              | No       | Optional OpenAI fallback                                          |
 

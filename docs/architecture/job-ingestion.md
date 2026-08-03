@@ -15,18 +15,46 @@ global write path.
 The current Module:
 
 - reads configured ATS feed URLs from the `companies` table;
+- schedules global scans twice daily through Celery Beat and Redis;
 - fetches Greenhouse, Ashby, and Lever public job boards;
 - converts provider payloads into one `RawJob` representation;
 - preserves useful provider formatting while removing unsafe HTML;
 - stores jobs idempotently using the existing unique URL constraint; and
 - isolates provider and persistence failures by company.
 
-It does not yet schedule itself, record durable scan history, determine whether
-a missing posting has closed, or calculate personalized recommendations.
+It does not yet record durable scan history, determine whether a missing posting
+has closed, or calculate personalized recommendations.
 
-## Primary interface
+## Execution interfaces
 
-The operator-facing interface is:
+The normal execution path is operator-controlled infrastructure:
+
+```text
+Celery Beat ── publishes at 07:00 and 15:00 UTC ──► Redis broker
+                                                        │
+                                                        ▼
+                                         ingestion-queue Celery worker
+                                                        │
+                                                        ▼
+                                                run_scan_locked()
+```
+
+Beat publishes `hire_journey.ingest_jobs` twice daily. A dedicated worker
+consumes the `ingestion` queue and invokes `run_scan_locked()`. The FastAPI
+process does not schedule or execute scans, and there is no user-facing HTTP
+endpoint for starting ingestion. Starting Beat does not trigger an immediate
+scan; the first run occurs at the next configured schedule slot.
+
+The schedule uses UTC explicitly, so the two slots are `07:00` and `15:00` UTC
+regardless of the host timezone. Exactly one Beat process must run for this
+application. Multiple Beat instances can publish duplicate tasks.
+
+Redis database `0` is the default broker and Redis database `1` is the default
+result backend. Separating the logical databases prevents result keys from
+sharing the broker namespace, but both defaults still use the same Redis
+server. Task results expire after one hour.
+
+The operator-facing fallback interface is:
 
 ```bash
 cd backend
@@ -37,6 +65,8 @@ The script calls `run_scan_locked()`. That function owns the process-independent
 PostgreSQL advisory lock, creates its own database session, and calls
 `run_scan()`. Callers therefore do not need to know about individual providers,
 HTTP clients, concurrency controls, parsing, sanitization, or upsert behavior.
+The Celery task is a thin adapter around the same function, so scheduled and
+manual scans share one ingestion implementation and one locking policy.
 
 `run_scan_locked()` currently returns one integer: the number of jobs fetched
 and successfully upserted during the run. It does not distinguish new rows from
@@ -142,6 +172,8 @@ The checked-in defaults are suitable for local development.
 
 | Environment variable | Default | Meaning |
 | --- | ---: | --- |
+| `CELERY_BROKER_URL` | `redis://localhost:6379/0` | Redis connection used to publish and consume tasks |
+| `CELERY_RESULT_BACKEND` | `redis://localhost:6379/1` | Redis connection used for task state and short-lived results |
 | `ATS_HTTP_TIMEOUT_SECONDS` | `10` | HTTP timeout per operation |
 | `ATS_MAX_RESPONSE_MB` | `50` | Maximum decoded response body per company feed |
 | `ATS_MAX_ATTEMPTS` | `3` | Maximum attempts for retryable failures |
@@ -149,8 +181,10 @@ The checked-in defaults are suitable for local development.
 | `ATS_HTTP_MAX_CONNECTIONS` | `20` | Shared HTTP connection-pool limit |
 | `ATS_HTTP_MAX_KEEPALIVE_CONNECTIONS` | `10` | Reusable idle connections retained in the pool |
 
-Provider concurrency limits, retryable statuses, redirect bounds, and parsing
-rules remain code-level policy rather than deployment configuration.
+The twice-daily schedule, task routing, acknowledgement policy, result expiry,
+provider concurrency limits, retryable statuses, redirect bounds, and parsing
+rules remain code-level policy rather than deployment configuration. Changing
+the schedule therefore requires a code change and a Beat restart.
 
 ## Failure isolation
 
@@ -161,7 +195,16 @@ and later company results continue.
 
 The advisory lock prevents two application processes from running global
 ingestion simultaneously against the same PostgreSQL database. It complements
-the in-process concurrency controls; it does not replace them.
+the in-process concurrency controls; it does not replace them. The lock applies
+across scheduled workers and the manual CLI fallback. A second task that reaches
+the lock while a scan is active exits as skipped rather than starting another
+global scan.
+
+The Celery worker acknowledges ingestion tasks after execution, rejects tasks
+when a worker is lost, prefetches one task at a time, and tracks the started
+state. Production deployments should use a dedicated `ingestion` worker with
+concurrency `1`; the PostgreSQL advisory lock remains the final cross-process
+safety mechanism.
 
 ## Verification
 
@@ -175,17 +218,21 @@ The ingestion tests cover:
 - provider fetch and persistence failure isolation;
 - salary extraction and successful-snapshot replacement;
 - bulk-upsert chunking; and
-- persistence failure isolation.
+- persistence failure isolation;
+- Celery task discovery, schedule, and `ingestion` queue routing;
+- task success, lock-contention, error, and resource-cleanup behavior; and
+- absence of a user-triggerable ingestion route.
 
-See `backend/tests/test_provider_ingestion.py`, `test_job_ingestion.py`,
-`test_fetch_json.py`, `test_fetch_service.py`, and `test_sources.py`.
+See `backend/tests/test_celery_app.py`, `test_ingestion_task.py`,
+`test_search_ingestion_access.py`, `test_provider_ingestion.py`,
+`test_job_ingestion.py`, `test_fetch_json.py`, `test_fetch_service.py`, and
+`test_sources.py`.
 
 ## Known gaps
 
 The current implementation intentionally leaves these items open:
 
 - structured run outcomes and provider-level counters (HIJ-14);
-- twice-daily scheduling (HIJ-15);
 - bounded incremental fetch-and-persist workers instead of retaining every
   company result until all fetching completes;
 - repeatable company-feed health reporting (HIJ-16);
@@ -194,7 +241,7 @@ The current implementation intentionally leaves these items open:
 - closed-job/staleness treatment on read paths; and
 - cross-provider duplicate presentation on read paths.
 
-Do not merge the old `feat/pipeline-scheduler` implementation into this Module.
-That branch targets removed database models and older ingestion interfaces. Its
-APScheduler pattern can be reimplemented against `run_scan_locked()` when the
-scheduling ticket is taken up.
+The scheduling decision and operational tradeoffs are recorded in
+[ADR-0004](../adr/0004-celery-redis-ingestion-scheduling.md). The previous
+in-process APScheduler proposal is superseded: scheduling now remains outside
+the FastAPI lifecycle and uses Celery Beat, Redis, and a dedicated worker.

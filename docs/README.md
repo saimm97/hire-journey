@@ -16,10 +16,11 @@ with it safely.
   surfaces, action hierarchy, responsive navigation, and truthful onboarding
   progress.
 - [Job ingestion architecture](architecture/job-ingestion.md) — provider
-  Adapters, bounded fetching, sanitization, URL-idempotent persistence, and
-  current limitations.
-- [Run job ingestion locally](runbooks/job-ingestion.md) — database setup,
-  company seeding, manual ingestion, verification, tests, and troubleshooting.
+  Adapters, Celery/Redis scheduling, bounded fetching, sanitization,
+  URL-idempotent persistence, and current limitations.
+- [Operate scheduled job ingestion](runbooks/job-ingestion.md) — prerequisites,
+  Redis, Celery worker and Beat startup, scheduled and manual operation,
+  verification, production guidance, and troubleshooting.
 - [ADR-0001: Profile-centred onboarding schema](adr/0001-profile-centered-onboarding-schema.md)
   — the decisions and tradeoffs behind the July 2026 refactor.
 - [ADR-0002: Resume-first, snapshot-driven onboarding](adr/0002-resume-first-snapshot-onboarding.md)
@@ -28,6 +29,9 @@ with it safely.
 - [ADR-0003: Bound and isolate ATS ingestion](adr/0003-bound-ats-ingestion.md)
   — the network, concurrency, registry, failure-isolation, and persistence
   decisions behind the current ingestion Module.
+- [ADR-0004: Schedule ingestion with Celery and Redis](adr/0004-celery-redis-ingestion-scheduling.md)
+  — the operator-controlled scheduler topology, fixed UTC schedule, queue and
+  locking policy, and manual fallback.
 - [Database migration runbook](runbooks/database-migrations.md) — applying,
   verifying, and troubleshooting migrations.
 - [Onboarding progress](progress/onboarding.md) — completed work, open work,
