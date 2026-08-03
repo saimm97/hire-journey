@@ -138,7 +138,5 @@
   body {
     @apply bg-background font-sans text-[15px] leading-6 text-foreground;
   }
-  html {
-    @apply font-sans;
-  }
+  
 }

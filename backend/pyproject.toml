@@ -45,6 +45,9 @@ dependencies = [
 
     # Utilities
     "pyyaml>=6.0.0",
+
+    # Scheduling
+    "celery[redis]>=5.6.3,<5.7",
 ]
 
 [project.optional-dependencies]

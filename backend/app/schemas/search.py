@@ -10,10 +10,6 @@ class JobResult(BaseModel):
     score: int
 
 
-class SearchRunResponse(BaseModel):
-    total_jobs_fetched: int
-
-
 class SearchResultsResponse(BaseModel):
     total: int
     results: list[JobResult]

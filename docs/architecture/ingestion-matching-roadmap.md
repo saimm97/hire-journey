@@ -29,14 +29,15 @@ so a busy provider cannot reserve idle global slots.
    stores the full provider inventory. User roles, skills, locations, work mode,
    and salary preferences belong to `search_service.get_results` and later
    matching phases, never the global write path.
-2. **Decouple scanning from the request path.** `POST /search/run` is currently
-  callable by any authenticated user and triggers a full scan. Fix: in-process
-   APScheduler (`AsyncIOScheduler`) in the FastAPI lifespan, running `run_scan()` on
-   an interval (`scan_interval_hours` setting), with `max_instances=1`,
-   `coalesce=True`, and an immediate first run on boot. (This exact pattern existed
-   before on `feat/pipeline-scheduler`/`feat/job-search`, but those branches predate
-   the 2026-07-18 ERD refactor and still reference the dropped `Source`/`JobScore`
-   models — don't merge them, re-implement the pattern against the current schema.)
+2. **Decouple scanning from the request path — completed.** The public
+   `POST /search/run` trigger has been removed. Celery Beat publishes
+   `hire_journey.ingest_jobs` at `07:00` and `15:00` UTC, Redis carries the task,
+   and a dedicated `ingestion` worker calls `run_scan_locked()`. The FastAPI
+   lifecycle is independent of scheduling, and the existing CLI remains an
+   operator-only fallback. Starting the scheduler waits for the next schedule
+   slot instead of performing an immediate boot scan; an operator can use the
+   CLI when an immediate scan is needed. This supersedes the earlier in-process
+   APScheduler proposal; see [ADR-0004](../adr/0004-celery-redis-ingestion-scheduling.md).
 3. **Collapse cross-source duplicates at read time.** CLAUDE.md already documents
   the rule — read paths must collapse jobs on normalized `(company_id, title,  location)` — but `get_results` doesn't do it. Real bug, not just a nice-to-have.
    Keep the collapse *display-time only* (never merge/delete underlying rows) since
