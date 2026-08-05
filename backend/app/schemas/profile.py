@@ -296,7 +296,7 @@ class ProfileDetailsUpdate(StrictRequest):
         return _clean_str_list(value)
 
 
-# ── Preferences step (PUT /profile/preferences) ────────────────────────
+# ── Preferences section (PATCH /profile) ───────────────────────────────
 
 
 class PreferencesUpdate(StrictRequest):

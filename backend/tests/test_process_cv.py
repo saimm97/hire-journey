@@ -22,6 +22,7 @@ from app.schemas.extraction import (
     ProjectItem,
     ResumeExtraction,
 )
+from app.schemas.profile import PreferencesUpdate, ProfileUpdate
 from app.services import profile_service, resume_service
 
 
@@ -202,7 +203,18 @@ async def test_reupload_replaces_and_clears_but_keeps_preferences(db, test_user,
         ResumeExtraction(first_name="Jane", phone_number="123", technologies=["Python"]),
     )
     await profile_service.process_cv(db, test_user.id, "cv.pdf", _pdf_bytes())
-    await profile_service.update_profile(db, test_user.id, {"desired_roles": ["backend"]})
+    await profile_service.update_profile(
+        db,
+        test_user.id,
+        ProfileUpdate(
+            preferences=PreferencesUpdate(
+                desired_roles=["backend"],
+                desired_locations=["Berlin"],
+                work_modes_preferred=["remote"],
+                seniority_level="senior",
+            )
+        ),
+    )
 
     profile_before = (
         await db.execute(select(Profile).where(Profile.user_id == test_user.id))

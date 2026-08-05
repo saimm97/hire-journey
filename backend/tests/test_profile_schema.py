@@ -1,5 +1,8 @@
 """Focused tests for the onboarding profile schema and normalization rules."""
 
+import pytest
+from pydantic import ValidationError
+
 from app.database import Base
 from app.models import (
     EmploymentHistory,
@@ -10,20 +13,25 @@ from app.models import (
     Project,
     Technology,
 )
-from app.schemas.profile import ProfileUpdate
+from app.schemas.profile import ProfileDetailsUpdate, ProfileUpdate
 from app.services.profile_service import normalize_technology
 
 
-def test_profile_update_normalizes_nullable_arrays():
-    update = ProfileUpdate.model_validate(
-        {
-            "desired_roles": None,
-            "work_modes_preferred": ["remote"],
-        }
-    )
+def test_profile_update_requires_at_least_one_section():
+    with pytest.raises(ValidationError):
+        ProfileUpdate.model_validate({})
 
-    assert update.desired_roles == []
-    assert update.work_modes_preferred == ["remote"]
+
+def test_profile_update_rejects_unknown_keys():
+    """Sections are full replacements, so a dropped typo would clear the rest."""
+    with pytest.raises(ValidationError):
+        ProfileUpdate.model_validate({"details": {}, "prefrences": {}})
+
+    with pytest.raises(ValidationError):
+        ProfileDetailsUpdate.model_validate({"frist_name": "Ada"})
+
+    with pytest.raises(ValidationError):
+        ProfileDetailsUpdate.model_validate({"projects": [{"name": "P", "projct_id": 1}]})
 
 
 def test_technology_normalization_is_case_and_whitespace_insensitive():

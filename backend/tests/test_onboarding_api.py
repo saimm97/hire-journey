@@ -1,4 +1,8 @@
-"""API tests for the onboarding snapshot, details, and preferences steps."""
+"""API tests for the onboarding snapshot and the unified PATCH /profile update.
+
+Both correction screens (details, preferences) persist through one endpoint.
+An omitted section is left untouched; a supplied section is fully replaced.
+"""
 
 import uuid
 
@@ -52,7 +56,15 @@ async def test_snapshot_shape(client, db, test_user):
     ]
 
 
-# ── Details step ───────────────────────────────────────────────────────
+_PREFS = {
+    "desired_roles": ["Backend Engineer"],
+    "desired_locations": ["Berlin"],
+    "work_modes_preferred": ["remote"],
+    "seniority_level": "senior",
+}
+
+
+# ── Update: details section ────────────────────────────────────────────
 
 
 async def test_details_roundtrip(client, db, test_user):
@@ -89,7 +101,7 @@ async def test_details_roundtrip(client, db, test_user):
         "technologies": ["Python", " python ", "FastAPI"],
     }
 
-    response = await client.put("/api/v1/profile/details", json=payload)
+    response = await client.patch("/api/v1/profile", json={"details": payload})
 
     try:
         assert response.status_code == 200
@@ -143,32 +155,37 @@ async def test_details_validation_errors(client, db, test_user):
         {"social_links": {"github_url": "not a url"}},
     ]
     for payload in bad_payloads:
-        assert (await client.put("/api/v1/profile/details", json=payload)).status_code == 422
+        response = await client.patch("/api/v1/profile", json={"details": payload})
+        assert response.status_code == 422
 
 
 async def test_details_validation_error_returns_actionable_field_path(client, db, test_user):
     await _seed_profile(db, test_user.id)
 
-    response = await client.put(
-        "/api/v1/profile/details",
+    response = await client.patch(
+        "/api/v1/profile",
         json={
-            "education": [
-                {
-                    "institution": "TU Berlin",
-                    "start_date": "May 2021",
-                }
-            ]
+            "details": {
+                "education": [
+                    {
+                        "institution": "TU Berlin",
+                        "start_date": "May 2021",
+                    }
+                ]
+            }
         },
     )
 
     assert response.status_code == 422
+    # The path is section-qualified now; the client strips the leading section
+    # segment so form controls keep matching on the bare field path.
     assert response.json() == {
         "error": {
             "code": "validation_error",
             "message": "Some details need fixing.",
             "fields": [
                 {
-                    "path": ["education", 0, "start_date"],
+                    "path": ["details", "education", 0, "start_date"],
                     "message": "must be in YYYY or YYYY-MM format",
                 }
             ],
@@ -179,23 +196,25 @@ async def test_details_validation_error_returns_actionable_field_path(client, db
 async def test_details_rejects_reversed_dates_on_the_end_fields(client, db, test_user):
     await _seed_profile(db, test_user.id)
 
-    response = await client.put(
-        "/api/v1/profile/details",
+    response = await client.patch(
+        "/api/v1/profile",
         json={
-            "education": [
-                {
-                    "institution": "TU Berlin",
-                    "start_date": "2026",
-                    "end_date": "2012",
-                }
-            ],
-            "certifications": [
-                {
-                    "name": "AWS",
-                    "issued_at": "2025-09",
-                    "expires_at": "2025-03",
-                }
-            ],
+            "details": {
+                "education": [
+                    {
+                        "institution": "TU Berlin",
+                        "start_date": "2026",
+                        "end_date": "2012",
+                    }
+                ],
+                "certifications": [
+                    {
+                        "name": "AWS",
+                        "issued_at": "2025-09",
+                        "expires_at": "2025-03",
+                    }
+                ],
+            }
         },
     )
 
@@ -204,8 +223,14 @@ async def test_details_rejects_reversed_dates_on_the_end_fields(client, db, test
         tuple(field["path"]): field["message"] for field in response.json()["error"]["fields"]
     }
     assert fields == {
-        ("education", 0, "end_date"): "education end date cannot precede its start date",
         (
+            "details",
+            "education",
+            0,
+            "end_date",
+        ): "education end date cannot precede its start date",
+        (
+            "details",
             "certifications",
             0,
             "expires_at",
@@ -218,16 +243,18 @@ async def test_details_accepts_same_year_when_only_one_date_has_month_precision(
 ):
     await _seed_profile(db, test_user.id)
 
-    response = await client.put(
-        "/api/v1/profile/details",
+    response = await client.patch(
+        "/api/v1/profile",
         json={
-            "education": [
-                {
-                    "institution": "TU Berlin",
-                    "start_date": "2021-09",
-                    "end_date": "2021",
-                }
-            ]
+            "details": {
+                "education": [
+                    {
+                        "institution": "TU Berlin",
+                        "start_date": "2021-09",
+                        "end_date": "2021",
+                    }
+                ]
+            }
         },
     )
 
@@ -236,17 +263,21 @@ async def test_details_accepts_same_year_when_only_one_date_has_month_precision(
 
 async def test_details_rejects_foreign_project_id(client, db, test_user):
     await _seed_profile(db, test_user.id)
-    response = await client.put(
-        "/api/v1/profile/details",
+    response = await client.patch(
+        "/api/v1/profile",
         json={
-            "projects": [
-                {"name": "New project"},
-                {"project_id": 99999999, "name": "Stale project"},
-            ]
+            "details": {
+                "projects": [
+                    {"name": "New project"},
+                    {"project_id": 99999999, "name": "Stale project"},
+                ]
+            }
         },
     )
     # A stale/foreign project_id is a conflict to resolve by reloading, not bad input.
     assert response.status_code == 409
+    # Hand-built by the ownership handler, so it carries no section segment —
+    # which is already the post-strip shape the editor rows are keyed on.
     assert response.json() == {
         "error": {
             "code": "projects_stale",
@@ -262,7 +293,8 @@ async def test_details_rejects_foreign_project_id(client, db, test_user):
 
 
 async def test_details_requires_profile(client):
-    assert (await client.put("/api/v1/profile/details", json={})).status_code == 404
+    response = await client.patch("/api/v1/profile", json={"details": {}})
+    assert response.status_code == 404
 
 
 # ── Project reconciliation (service level) ─────────────────────────────
@@ -330,7 +362,7 @@ async def test_shared_project_rename_copies_on_write(db, test_user):
         await db.commit()
 
 
-# ── Preferences step ───────────────────────────────────────────────────
+# ── Update: preferences section ────────────────────────────────────────
 
 
 async def test_preferences_happy_path_completes_onboarding(client, db, test_user):
@@ -343,7 +375,7 @@ async def test_preferences_happy_path_completes_onboarding(client, db, test_user
         "seniority_level": "senior",
     }
 
-    response = await client.put("/api/v1/profile/preferences", json=payload)
+    response = await client.patch("/api/v1/profile", json={"preferences": payload})
 
     assert response.status_code == 200
     body = response.json()
@@ -374,7 +406,8 @@ async def test_preferences_validation_errors(client, db, test_user):
         {**valid, "minimum_salary": -1},
     ]
     for payload in bad_payloads:
-        assert (await client.put("/api/v1/profile/preferences", json=payload)).status_code == 422
+        response = await client.patch("/api/v1/profile", json={"preferences": payload})
+        assert response.status_code == 422
 
 
 async def test_preferences_requires_profile(client):
@@ -384,27 +417,174 @@ async def test_preferences_requires_profile(client):
         "work_modes_preferred": ["remote"],
         "seniority_level": "senior",
     }
-    assert (await client.put("/api/v1/profile/preferences", json=payload)).status_code == 404
+    response = await client.patch("/api/v1/profile", json={"preferences": payload})
+    assert response.status_code == 404
 
 
 async def test_preferences_empty_lists_are_field_addressable(client, db, test_user):
     # The required-list rejections must carry a concrete path (field_validator,
     # not model_validator) so the UI can highlight the exact control.
     await _seed_profile(db, test_user.id)
-    response = await client.put(
-        "/api/v1/profile/preferences",
+    response = await client.patch(
+        "/api/v1/profile",
         json={
-            "desired_roles": [],
-            "desired_locations": [],
-            "work_modes_preferred": [],
-            "seniority_level": "senior",
+            "preferences": {
+                "desired_roles": [],
+                "desired_locations": [],
+                "work_modes_preferred": [],
+                "seniority_level": "senior",
+            }
         },
     )
     assert response.status_code == 422
     paths = {tuple(field["path"]) for field in response.json()["error"]["fields"]}
-    assert ("desired_roles",) in paths
-    assert ("desired_locations",) in paths
-    assert ("work_modes_preferred",) in paths
+    assert ("preferences", "desired_roles") in paths
+    assert ("preferences", "desired_locations") in paths
+    assert ("preferences", "work_modes_preferred") in paths
+
+
+# ── Update: section semantics ──────────────────────────────────────────
+
+
+async def test_update_requires_at_least_one_section(client, db, test_user):
+    await _seed_profile(db, test_user.id, first_name="Jane")
+    assert (await client.patch("/api/v1/profile", json={})).status_code == 422
+
+
+async def test_update_rejects_unknown_keys(client, db, test_user):
+    """A typo must 422, never silently clear the rest of a replaced section."""
+    await _seed_profile(db, test_user.id, first_name="Jane", title="Eng")
+
+    # Misspelled section: the sibling section would otherwise commit alone.
+    misspelled_section = {"details": {"first_name": "Ada"}, "prefrences": _PREFS}
+    assert (await client.patch("/api/v1/profile", json=misspelled_section)).status_code == 422
+
+    # Misspelled field: every other details column defaults, so accepting this
+    # would wipe first_name, title, education, projects and technologies.
+    misspelled_field = {"details": {"frist_name": "Ada"}}
+    assert (await client.patch("/api/v1/profile", json=misspelled_field)).status_code == 422
+
+    # Nothing was written.
+    profile = (await client.get("/api/v1/profile")).json()["profile"]
+    assert profile["first_name"] == "Jane"
+    assert profile["title"] == "Eng"
+
+
+async def test_details_only_leaves_preferences_intact(client, db, test_user):
+    await _seed_profile(db, test_user.id, first_name="Old", **_PREFS)
+
+    response = await client.patch(
+        "/api/v1/profile",
+        json={"details": {"first_name": "Jane", "last_name": "Doe", "title": "Eng"}},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["profile"]["first_name"] == "Jane"
+    assert body["profile"]["desired_roles"] == ["Backend Engineer"]
+    assert body["profile"]["seniority_level"] == "senior"
+    assert body["onboarding_complete"] is True
+
+
+async def test_preferences_only_leaves_details_and_collections_intact(client, db, test_user):
+    marker = uuid.uuid4().hex[:8]
+    user_id = test_user.id
+    await _seed_profile(db, user_id, first_name="Jane")
+    await client.patch(
+        "/api/v1/profile",
+        json={
+            "details": {
+                "first_name": "Jane",
+                "last_name": "Doe",
+                "title": "Eng",
+                "technologies": ["Python"],
+                "employment_history": [{"company_name": f"PrefCo {marker}", "title": "Dev"}],
+                "projects": [{"name": "Proj", "technologies": ["Rust"]}],
+            }
+        },
+    )
+
+    try:
+        response = await client.patch("/api/v1/profile", json={"preferences": _PREFS})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["profile"]["first_name"] == "Jane"
+        assert body["profile"]["title"] == "Eng"
+        assert [e["company_name"] for e in body["employment_history"]] == [f"PrefCo {marker}"]
+        assert [p["name"] for p in body["projects"]] == ["Proj"]
+        assert body["projects"][0]["tech_stack"] == ["rust"]
+        # Project-only tech is NOT hoisted into the profile's skill set on the
+        # human path (process_cv unions them; the editor's list is user-curated).
+        assert body["profile"]["technologies"] == ["python"]
+        assert body["onboarding_complete"] is True
+    finally:
+        profile_id = await db.scalar(select(Profile.id).where(Profile.user_id == user_id))
+        await db.execute(
+            delete(EmploymentHistory).where(EmploymentHistory.profile_id == profile_id)
+        )
+        await db.execute(delete(Company).where(Company.name == f"PrefCo {marker}"))
+        await db.commit()
+
+
+async def test_both_sections_apply_in_one_request(client, db, test_user):
+    await _seed_profile(db, test_user.id, first_name="Old")
+
+    response = await client.patch(
+        "/api/v1/profile",
+        json={
+            "details": {"first_name": "Jane", "last_name": "Doe", "title": "Eng"},
+            "preferences": _PREFS,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["profile"]["first_name"] == "Jane"
+    assert body["profile"]["desired_roles"] == ["Backend Engineer"]
+    assert body["onboarding_complete"] is True
+    assert body["completion_issues"] == []
+
+
+async def test_details_failure_rolls_back_the_preferences_in_the_same_request(
+    client, db, test_user
+):
+    """The reason the two steps had to merge: one transaction, or none."""
+    other = User(
+        username=f"pytest-{uuid.uuid4().hex[:12]}",
+        email=f"pytest-{uuid.uuid4().hex[:12]}@example.test",
+    )
+    db.add(other)
+    await db.commit()
+    await db.refresh(other)
+    other_id = other.id
+
+    await _seed_profile(db, test_user.id, first_name="Jane", **_PREFS)
+    other_profile_id = await _seed_profile(db, other_id, with_resume=False)
+    await profile_service.save_projects(db, other_profile_id, [ProjectEntry(name="Theirs")])
+    await db.commit()
+    [foreign] = await profile_service._load_projects(db, other_profile_id)
+
+    try:
+        response = await client.patch(
+            "/api/v1/profile",
+            json={
+                "details": {
+                    "first_name": "Jane",
+                    "projects": [{"project_id": foreign.project_id, "name": "Stolen"}],
+                },
+                "preferences": {**_PREFS, "seniority_level": "lead"},
+            },
+        )
+
+        assert response.status_code == 409
+        # The preferences upsert ran BEFORE the ownership check failed, so this
+        # only passes if both sections share one transaction.
+        profile = (await client.get("/api/v1/profile")).json()["profile"]
+        assert profile["seniority_level"] == "senior"
+    finally:
+        await db.execute(delete(User).where(User.id == other_id))
+        await db.commit()
 
 
 # ── Error envelope ─────────────────────────────────────────────────────
