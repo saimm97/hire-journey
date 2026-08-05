@@ -118,23 +118,3 @@ async def upload_cv(
     except ExtractionError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     return await _snapshot(db, current_user)
-
-
-# @router.put("/details", response_model=OnboardingSnapshot)
-# async def save_details(
-#     payload: ProfileDetailsUpdate,
-#     current_user: User = Depends(get_current_user),
-#     db: AsyncSession = Depends(get_db),
-# ) -> OnboardingSnapshot:
-#     await profile_service.save_details(db, current_user.id, payload)
-#     return await _snapshot(db, current_user)
-
-
-# @router.put("/preferences", response_model=OnboardingSnapshot)
-# async def save_preferences(
-#     payload: PreferencesUpdate,
-#     current_user: User = Depends(get_current_user),
-#     db: AsyncSession = Depends(get_db),
-# ) -> OnboardingSnapshot:
-#     await profile_service.save_preferences(db, current_user.id, payload)
-#     return await _snapshot(db, current_user)
