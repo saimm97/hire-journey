@@ -145,6 +145,12 @@ function focusFirstError(errors: FieldErrors): void {
   })
 }
 
+/** A validated details section plus the mapping needed to place its errors. */
+export type PreparedDetails = {
+  payload: ProfileDetailsPayload
+  projectPayloadIndexToUiIndex: number[]
+}
+
 function apiFieldErrors(
   error: ApiError,
   projectPayloadIndexToUiIndex: number[] = [],
@@ -560,7 +566,12 @@ export function useOnboardingProfile({
     return errors
   }, [identity, education.items, certifications.items, employment.items, projects.items])
 
-  const saveAndContinue = useCallback(async (): Promise<boolean> => {
+  /**
+   * Validate and build the complete details payload, or null after surfacing
+   * the inline errors. Split from submitting so the profile editor can send
+   * this section together with preferences in one atomic PATCH.
+   */
+  const prepareSave = useCallback((): PreparedDetails | null => {
     const invalid = validate()
     if (Object.keys(invalid).length) {
       setFieldErrors(invalid)
@@ -571,72 +582,57 @@ export function useOnboardingProfile({
         }.`,
       })
       focusFirstError(invalid)
-      return false
+      return null
     }
     setFieldErrors({})
-    setSaving(true)
     const projectRows = projects.items
       .map((row, uiIndex) => ({ row, uiIndex }))
       .filter(({ row }) => hasContent(row))
-    const projectPayloadIndexToUiIndex = projectRows.map(({ uiIndex }) => uiIndex)
-    try {
-      const payload: ProfileDetailsPayload = {
-        first_name: emptyToNull(identity.first_name),
-        last_name: emptyToNull(identity.last_name),
-        phone_number: emptyToNull(identity.phone_number),
-        location: emptyToNull(identity.location),
-        title: emptyToNull(identity.title),
-        summary: emptyToNull(summary),
-        social_links: {
-          github_url: emptyToNull(socialLinks.github_url),
-          linkedin_url: emptyToNull(socialLinks.linkedin_url),
-          portfolio_url: emptyToNull(socialLinks.portfolio_url),
-        },
-        education: education.items.filter(hasContent).map((row) => ({
-          institution: row.institution.trim(),
-          degree: emptyToNull(row.degree),
-          field: emptyToNull(row.field),
-          start_date: row.start_date || null,
-          end_date: row.end_date || null,
-        })),
-        certifications: certifications.items.filter(hasContent).map((row) => ({
-          name: row.name.trim(),
-          issuer: emptyToNull(row.issuer),
-          issued_at: row.issued_at || null,
-          expires_at: row.expires_at || null,
-        })),
-        employment_history: employment.items.filter(hasContent).map((row) => ({
-          company_name: row.company_name.trim(),
-          title: row.title.trim(),
-          start_date: row.start_date || null,
-          end_date: row.end_date || null,
-          description: emptyToNull(row.description),
-        })),
-        projects: projectRows.map(({ row }) => ({
-          project_id: row.project_id,
-          name: row.name.trim(),
-          summary: emptyToNull(row.summary),
-          github_url: emptyToNull(row.github_url),
-          deployed_url: emptyToNull(row.deployed_url),
-          technologies: row.technologies,
-        })),
-        technologies,
-      }
-      hydrate(await updateProfile({ details: payload }))
-      if (successMessage) setToast({ variant: "success", message: successMessage })
-      return true
-    } catch (error) {
-      if (error instanceof ApiError) {
-        const errors = apiFieldErrors(error, projectPayloadIndexToUiIndex)
-        setFieldErrors(errors)
-        if (error.code === "projects_stale") setProjectConflict(error.message)
-        focusFirstError(errors)
-      }
-      setToast(errorToast(error))
-      return false
-    } finally {
-      setSaving(false)
+    const payload: ProfileDetailsPayload = {
+      first_name: emptyToNull(identity.first_name),
+      last_name: emptyToNull(identity.last_name),
+      phone_number: emptyToNull(identity.phone_number),
+      location: emptyToNull(identity.location),
+      title: emptyToNull(identity.title),
+      summary: emptyToNull(summary),
+      social_links: {
+        github_url: emptyToNull(socialLinks.github_url),
+        linkedin_url: emptyToNull(socialLinks.linkedin_url),
+        portfolio_url: emptyToNull(socialLinks.portfolio_url),
+      },
+      education: education.items.filter(hasContent).map((row) => ({
+        institution: row.institution.trim(),
+        degree: emptyToNull(row.degree),
+        field: emptyToNull(row.field),
+        start_date: row.start_date || null,
+        end_date: row.end_date || null,
+      })),
+      certifications: certifications.items.filter(hasContent).map((row) => ({
+        name: row.name.trim(),
+        issuer: emptyToNull(row.issuer),
+        issued_at: row.issued_at || null,
+        expires_at: row.expires_at || null,
+      })),
+      employment_history: employment.items.filter(hasContent).map((row) => ({
+        company_name: row.company_name.trim(),
+        title: row.title.trim(),
+        start_date: row.start_date || null,
+        end_date: row.end_date || null,
+        description: emptyToNull(row.description),
+      })),
+      projects: projectRows.map(({ row }) => ({
+        project_id: row.project_id,
+        name: row.name.trim(),
+        summary: emptyToNull(row.summary),
+        github_url: emptyToNull(row.github_url),
+        deployed_url: emptyToNull(row.deployed_url),
+        technologies: row.technologies,
+      })),
+      technologies,
     }
+    // Blank drafts are filtered out of the payload, so a server error at
+    // payload index N has to be mapped back to the row the user can see.
+    return { payload, projectPayloadIndexToUiIndex: projectRows.map(({ uiIndex }) => uiIndex) }
   }, [
     validate,
     identity,
@@ -647,9 +643,43 @@ export function useOnboardingProfile({
     employment.items,
     projects.items,
     technologies,
-    hydrate,
-    successMessage,
   ])
+
+  /** Re-seed the form from the saved snapshot (backend-normalized values). */
+  const applySnapshot = useCallback(
+    (snapshot: OnboardingSnapshot) => {
+      hydrate(snapshot)
+      if (successMessage) setToast({ variant: "success", message: successMessage })
+    },
+    [hydrate, successMessage],
+  )
+
+  /** Route a failed save onto this section's controls. */
+  const applySaveError = useCallback((error: unknown, prepared?: PreparedDetails | null) => {
+    if (error instanceof ApiError) {
+      const errors = apiFieldErrors(error, prepared?.projectPayloadIndexToUiIndex ?? [])
+      setFieldErrors(errors)
+      if (error.code === "projects_stale") setProjectConflict(error.message)
+      focusFirstError(errors)
+    }
+    setToast(errorToast(error))
+  }, [])
+
+  /** Wizard convenience: prepare, submit this section alone, apply the result. */
+  const saveAndContinue = useCallback(async (): Promise<boolean> => {
+    const prepared = prepareSave()
+    if (!prepared) return false
+    setSaving(true)
+    try {
+      applySnapshot(await updateProfile({ details: prepared.payload }))
+      return true
+    } catch (error) {
+      applySaveError(error, prepared)
+      return false
+    } finally {
+      setSaving(false)
+    }
+  }, [prepareSave, applySnapshot, applySaveError])
 
   return {
     status,
@@ -680,6 +710,9 @@ export function useOnboardingProfile({
     saving,
     toast,
     dismissToast: useCallback(() => setToast(null), []),
+    prepareSave,
+    applySnapshot,
+    applySaveError,
     saveAndContinue,
   }
 }

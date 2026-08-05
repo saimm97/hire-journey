@@ -471,6 +471,86 @@ async def test_update_rejects_unknown_keys(client, db, test_user):
     assert profile["title"] == "Eng"
 
 
+async def test_invalid_sections_each_report_their_own_errors(client, db, test_user):
+    """The editor fans one 422 out to two forms, so both sections must report."""
+    await _seed_profile(db, test_user.id, first_name="Jane")
+
+    response = await client.patch(
+        "/api/v1/profile",
+        json={
+            "details": {"education": [{"institution": ""}]},
+            "preferences": {**_PREFS, "seniority_level": "boss"},
+        },
+    )
+
+    assert response.status_code == 422
+    paths = {tuple(field["path"]) for field in response.json()["error"]["fields"]}
+    assert ("details", "education", 0, "institution") in paths
+    assert ("preferences", "seniority_level") in paths
+
+
+async def test_invalid_preferences_leaves_the_details_section_unwritten(client, db, test_user):
+    """Validation rejects the whole body, so a valid sibling section is not applied."""
+    await _seed_profile(db, test_user.id, first_name="Original")
+
+    response = await client.patch(
+        "/api/v1/profile",
+        json={
+            "details": {"first_name": "Changed"},
+            "preferences": {**_PREFS, "desired_roles": []},
+        },
+    )
+
+    assert response.status_code == 422
+    stored = await db.scalar(select(Profile.first_name).where(Profile.user_id == test_user.id))
+    assert stored == "Original"
+
+
+async def test_explicit_null_section_is_treated_as_omitted(client, db, test_user):
+    """A client that always sends both keys can null one out instead of branching."""
+    await _seed_profile(db, test_user.id, first_name="Jane", title="Eng")
+
+    response = await client.patch(
+        "/api/v1/profile", json={"details": None, "preferences": _PREFS}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["profile"]["first_name"] == "Jane"  # untouched, not cleared
+    assert body["profile"]["title"] == "Eng"
+    assert body["profile"]["desired_roles"] == ["Backend Engineer"]
+
+
+async def test_emptied_collections_clear_and_orphan_delete(client, db, test_user):
+    """Full-replacement semantics: an empty list is a clear, not a no-op."""
+    await _seed_profile(db, test_user.id, first_name="Jane")
+    seeded = await client.patch(
+        "/api/v1/profile",
+        json={
+            "details": {
+                "first_name": "Jane",
+                "technologies": ["Python"],
+                "projects": [{"name": "Doomed", "technologies": ["Rust"]}],
+            }
+        },
+    )
+    project_id = seeded.json()["projects"][0]["project_id"]
+
+    response = await client.patch(
+        "/api/v1/profile",
+        json={"details": {"first_name": "Jane", "technologies": [], "projects": []}},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["projects"] == []
+    assert body["profile"]["technologies"] == []
+    orphaned = await db.scalar(
+        select(func.count()).select_from(Project).where(Project.id == project_id)
+    )
+    assert orphaned == 0  # the project identity went with its last membership
+
+
 async def test_details_only_leaves_preferences_intact(client, db, test_user):
     await _seed_profile(db, test_user.id, first_name="Old", **_PREFS)
 
@@ -571,7 +651,7 @@ async def test_details_failure_rolls_back_the_preferences_in_the_same_request(
             "/api/v1/profile",
             json={
                 "details": {
-                    "first_name": "Jane",
+                    "first_name": "OVERWRITTEN",
                     "projects": [{"project_id": foreign.project_id, "name": "Stolen"}],
                 },
                 "preferences": {**_PREFS, "seniority_level": "lead"},
@@ -579,9 +659,11 @@ async def test_details_failure_rolls_back_the_preferences_in_the_same_request(
         )
 
         assert response.status_code == 409
-        # The preferences upsert ran BEFORE the ownership check failed, so this
-        # only passes if both sections share one transaction.
         profile = (await client.get("/api/v1/profile")).json()["profile"]
+        # The details upsert ran before save_projects raised...
+        assert profile["first_name"] == "Jane"
+        # ...and the preferences upsert ran before that. Both only survive the
+        # rollback if all three share one transaction.
         assert profile["seniority_level"] == "senior"
     finally:
         await db.execute(delete(User).where(User.id == other_id))

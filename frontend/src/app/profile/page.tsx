@@ -14,11 +14,15 @@ import { ProfileOverview } from '@/components/profile/ProfileOverview'
 import { Button } from '@/components/ui/button'
 import { useOnboardingProfile } from '@/hooks/useOnboardingProfile'
 import { usePreferences } from '@/hooks/usePreferences'
+import { updateProfile } from '@/lib/api/profile'
 
 /** Post-onboarding profile: read-first, with the hardened forms available on demand. */
 export default function ProfilePage() {
   const router = useRouter()
   const [editing, setEditing] = useState(false)
+  // The combined save is owned here, not by either hook, so it needs its own
+  // in-flight flag; the hooks' own `saving` covers their single-section paths.
+  const [savingProfile, setSavingProfile] = useState(false)
   const details = useOnboardingProfile({
     guardCompleted: false,
   })
@@ -48,12 +52,36 @@ export default function ProfilePage() {
     retryAll()
   }
 
+  /**
+   * One atomic PATCH carrying both sections. Sending them as two requests
+   * would be two backend transactions, so a failure on the second would leave
+   * the first committed — a partially saved profile.
+   */
   const saveProfile = async () => {
-    if (!(await details.saveAndContinue())) return
-    if (!(await preferences.save())) return
-    setEditing(false)
+    // Prepare both before bailing, so a click surfaces every invalid control
+    // rather than only the first section's.
+    const preparedDetails = details.prepareSave()
+    const preparedPreferences = preferences.prepareSave()
+    if (!preparedDetails || !preparedPreferences) return
+
+    setSavingProfile(true)
+    try {
+      const snapshot = await updateProfile({
+        details: preparedDetails.payload,
+        preferences: preparedPreferences,
+      })
+      details.applySnapshot(snapshot)
+      preferences.applySnapshot(snapshot)
+      setEditing(false)
+    } catch (error) {
+      // A combined 422 can carry errors for both sections; each hook strips
+      // its own prefix and keeps only what belongs to it.
+      details.applySaveError(error, preparedDetails)
+      preferences.applySaveError(error)
+    } finally {
+      setSavingProfile(false)
+    }
   }
-  
 
   return (
     <AppShell>
@@ -125,12 +153,10 @@ export default function ProfilePage() {
               <Button
                 type="button"
                 onClick={() => void saveProfile()}
-                disabled={details.saving || preferences.saving}
+                disabled={savingProfile}
                 size="lg"
               >
-                {(details.saving || preferences.saving) && (
-                  <Loader2 className="size-4 animate-spin" />
-                )}
+                {savingProfile && <Loader2 className="size-4 animate-spin" />}
                 Save profile
               </Button>
             </div>
