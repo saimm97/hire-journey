@@ -177,9 +177,6 @@ class StrictRequest(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
-    
-    
-# ── Details step (PUT /profile/details) ────────────────────────────────
 
 
 class SocialLinksUpdate(StrictRequest):
