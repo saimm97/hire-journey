@@ -8,7 +8,7 @@ the correct behavior (unlike LLM output, which gets lenient normalization).
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from app.schemas.project import ProjectRead
 from app.utils import normalization, patterns
@@ -335,28 +335,11 @@ class PreferencesUpdate(BaseModel):
 class ProfileUpdate(BaseModel):
     """Editable onboarding fields; omitted keys remain unchanged on PATCH."""
 
-    first_name: str | None = Field(default=None, max_length=100)
-    last_name: str | None = Field(default=None, max_length=100)
-    phone_number: str | None = Field(default=None, max_length=50)
-    location: str | None = Field(default=None, max_length=255)
-    social_links: dict[str, str] | None = None
-    education: list[dict[str, Any]] | None = None
-    certifications: list[dict[str, Any]] | None = None
-    title: str | None = Field(default=None, max_length=255)
-    summary: str | None = None
-    minimum_salary: int | None = Field(default=None, ge=0, le=100_000_000)
-    desired_locations: list[str] | None = None
-    desired_roles: list[str] | None = None
-    work_modes_preferred: list[str] | None = None
-    seniority_level: str | None = Field(default=None, max_length=50)
-    technologies: list[str] | None = None
+    details: ProfileDetailsUpdate | None = None
+    preferences: PreferencesUpdate | None = None
 
-    @field_validator("desired_locations", "desired_roles", "work_modes_preferred")
-    @classmethod
-    def null_array_to_empty(cls, value: list[str] | None) -> list[str]:
-        return value if value is not None else []
-
-    @field_validator("social_links")
-    @classmethod
-    def validate_social_links(cls, value: dict[str, str] | None) -> dict[str, str]:
-        return value if value is not None else {}
+    @model_validator(mode="after")
+    def require_section(self) -> "ProfileUpdate":
+        if self.details is None and self.preferences is None:
+            raise ValueError("Provide details or preferences.")
+        return self

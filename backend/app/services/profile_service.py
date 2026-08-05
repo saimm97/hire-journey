@@ -23,6 +23,7 @@ from app.schemas.profile import (
     EmploymentRead,
     PreferencesUpdate,
     ProfileDetailsUpdate,
+    ProfileUpdate,
     ProjectEntry,
     ResumeMeta,
 )
@@ -546,71 +547,74 @@ async def save_projects(db: AsyncSession, profile_id: int, entries: list[Project
     await db.flush()
 
 
-async def save_details(db: AsyncSession, user_id: int, details: ProfileDetailsUpdate) -> None:
-    """Atomically persist the corrected details step (full replacement)."""
+async def _apply_details(
+    db: AsyncSession, user_id: int, profile_id: int, details: ProfileDetailsUpdate
+) -> None:
+    """Persist details step"""
+    links = {
+        "github_url": details.social_links.github_url,
+        "linkedin_url": details.social_links.linkedin_url,
+        "portfolio_url": details.social_links.portfolio_url,
+    }
+    fields = {
+        "first_name": _clean(details.first_name),
+        "last_name": _clean(details.last_name),
+        "phone_number": _clean(details.phone_number),
+        "location": _clean(details.location),
+        "title": _clean(details.title),
+        "summary": _clean(details.summary),
+        "social_links": {key: value for key, value in links.items() if value},
+        "education": [entry.model_dump(mode="json") for entry in details.education],
+        "certifications": [entry.model_dump(mode="json") for entry in details.certifications],
+    }
+    await upsert_profile(db, user_id, fields)
+    await set_profile_technologies(db, profile_id, details.technologies, replace=True)
+    await replace_employments(db, profile_id, details.employment_history)
+    await save_projects(db, profile_id, details.projects)
+
+
+async def _apply_preferences(
+    db: AsyncSession, user_id: int, preferences: PreferencesUpdate
+) -> None:
+    """Persist preferences step"""
+
+    fields = {
+        "minimum_salary": preferences.minimum_salary,
+        "desired_roles": preferences.desired_roles,
+        "desired_locations": preferences.desired_locations,
+        "work_modes_preferred": list(preferences.work_modes_preferred),
+        "seniority_level": preferences.seniority_level,
+    }
+    await upsert_profile(db, user_id, fields)
+
+
+async def update_profile(
+    db: AsyncSession,
+    user_id: int,
+    update: ProfileUpdate,
+) -> None:
     try:
-        profile_id = await _profile_id(db, user_id)  # 404 before any writes
-        links = {
-            "github_url": details.social_links.github_url,
-            "linkedin_url": details.social_links.linkedin_url,
-            "portfolio_url": details.social_links.portfolio_url,
-        }
-        fields = {
-            "first_name": _clean(details.first_name),
-            "last_name": _clean(details.last_name),
-            "phone_number": _clean(details.phone_number),
-            "location": _clean(details.location),
-            "title": _clean(details.title),
-            "summary": _clean(details.summary),
-            "social_links": {key: value for key, value in links.items() if value},
-            "education": [entry.model_dump(mode="json") for entry in details.education],
-            "certifications": [entry.model_dump(mode="json") for entry in details.certifications],
-        }
-        await upsert_profile(db, user_id, fields)
-        await set_profile_technologies(db, profile_id, details.technologies, replace=True)
-        await replace_employments(db, profile_id, details.employment_history)
-        await save_projects(db, profile_id, details.projects)
-        await db.commit()
-    except Exception:
-        await db.rollback()
-        raise
-
-
-async def save_preferences(db: AsyncSession, user_id: int, preferences: PreferencesUpdate) -> None:
-    """Persist the preferences step (onboarding must have started)."""
-    try:
-        await _profile_id(db, user_id)  # 404 before any writes
-        await upsert_profile(
-            db,
-            user_id,
-            {
-                "minimum_salary": preferences.minimum_salary,
-                "desired_roles": preferences.desired_roles,
-                "desired_locations": preferences.desired_locations,
-                "work_modes_preferred": list(preferences.work_modes_preferred),
-                "seniority_level": preferences.seniority_level,
-            },
-        )
-        await db.commit()
-    except Exception:
-        await db.rollback()
-        raise
-
-
-async def update_profile(db: AsyncSession, user_id: int, fields: dict) -> Profile:
-    technology_names = fields.pop("technologies", None)
-    try:
-        await upsert_profile(db, user_id, fields)
         profile_id = await _profile_id(db, user_id)
-        if technology_names is not None:
-            await set_profile_technologies(db, profile_id, technology_names, replace=True)
+
+        if update.details is not None:
+            await _apply_details(
+                db,
+                user_id,
+                profile_id,
+                update.details,
+            )
+
+        if update.preferences is not None:
+            await _apply_preferences(
+                db,
+                user_id,
+                update.preferences,
+            )
+
         await db.commit()
     except Exception:
         await db.rollback()
         raise
-    profile = await _load_profile(db, user_id)
-    assert profile is not None
-    return profile
 
 
 async def process_cv(
