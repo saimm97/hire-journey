@@ -169,10 +169,20 @@ class OnboardingSnapshot(BaseModel):
     completion_issues: list[CompletionIssue]
 
 
+class StrictRequest(BaseModel):
+    """Base for user-edited payloads: an unknown key is a 422, never a shrug.
+
+    Every collection below is a full replacement, so a silently dropped key
+    doesn't merely fail to apply — it clears the stored value.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    
+    
 # ── Details step (PUT /profile/details) ────────────────────────────────
 
 
-class SocialLinksUpdate(BaseModel):
+class SocialLinksUpdate(StrictRequest):
     github_url: str | None = None
     linkedin_url: str | None = None
     portfolio_url: str | None = None
@@ -183,7 +193,7 @@ class SocialLinksUpdate(BaseModel):
         return _url_or_none(value)
 
 
-class EducationEntry(BaseModel):
+class EducationEntry(StrictRequest):
     institution: str = Field(min_length=1, max_length=255)
     degree: str | None = Field(default=None, max_length=255)
     field: str | None = Field(default=None, max_length=255)
@@ -203,7 +213,7 @@ class EducationEntry(BaseModel):
         return value
 
 
-class CertificationEntry(BaseModel):
+class CertificationEntry(StrictRequest):
     name: str = Field(min_length=1, max_length=255)
     issuer: str | None = Field(default=None, max_length=255)
     issued_at: str | None = None
@@ -222,7 +232,7 @@ class CertificationEntry(BaseModel):
         return value
 
 
-class EmploymentEntry(BaseModel):
+class EmploymentEntry(StrictRequest):
     company_name: str = Field(min_length=1, max_length=255)
     title: str = Field(min_length=1, max_length=255)
     start_date: str | None = None
@@ -242,7 +252,7 @@ class EmploymentEntry(BaseModel):
         return value
 
 
-class ProjectEntry(BaseModel):
+class ProjectEntry(StrictRequest):
     """A project in the details payload.
 
     project_id present -> edit of an existing project (must belong to this
@@ -267,8 +277,8 @@ class ProjectEntry(BaseModel):
         return _clean_str_list(value)
 
 
-class ProfileDetailsUpdate(BaseModel):
-    """The complete details step; collections are full replacements (PUT)."""
+class ProfileDetailsUpdate(StrictRequest):
+    """The complete details step; collections are full replacements (PATCH)."""
 
     first_name: str | None = Field(default=None, max_length=100)
     last_name: str | None = Field(default=None, max_length=100)
@@ -292,7 +302,7 @@ class ProfileDetailsUpdate(BaseModel):
 # ── Preferences step (PUT /profile/preferences) ────────────────────────
 
 
-class PreferencesUpdate(BaseModel):
+class PreferencesUpdate(StrictRequest):
     # Upper bound keeps the value safely inside the INTEGER column (int32).
     minimum_salary: int | None = Field(default=None, ge=0, le=100_000_000)
     desired_roles: list[str] = Field(max_length=100)
@@ -332,7 +342,7 @@ class PreferencesUpdate(BaseModel):
 # ── Post-onboarding partial editing (PATCH /profile) ───────────────────
 
 
-class ProfileUpdate(BaseModel):
+class ProfileUpdate(StrictRequest):
     """Editable onboarding fields; omitted keys remain unchanged on PATCH."""
 
     details: ProfileDetailsUpdate | None = None
