@@ -77,21 +77,6 @@ async def _load_profile(db: AsyncSession, user_id: int) -> Profile | None:
     ).scalar_one_or_none()
 
 
-async def get_match_preferences(db: AsyncSession, user_id: int) -> tuple[list[str], list[str]]:
-    """Return (desired_roles, technology_names) used to score jobs for this user.
-
-    Both drive keyword scoring: desired_roles are the primary "what job" signal,
-    technologies the "does my stack fit" bonus. Returns ([], []) when the user
-    has no profile yet — the caller then scores nothing, yielding an empty feed.
-    """
-    profile = await _load_profile(db, user_id)
-    if profile is None:
-        return [], []
-    roles = list(profile.desired_roles or [])
-    techs = [t.name for t in profile.technologies]
-    return roles, techs
-
-
 async def _profile_id(db: AsyncSession, user_id: int) -> int:
     profile_id = await db.scalar(select(Profile.id).where(Profile.user_id == user_id))
     if profile_id is None:
@@ -211,12 +196,11 @@ def _normalize_company_name(name: str) -> str:
 async def _get_or_create_company(db: AsyncSession, display_name: str) -> Company:
     """Case-insensitively reuse a company row, creating it if absent.
 
-    The companies table is shared with ATS scan targets, whose unique
-    constraint covers only the exact name — "Google" and "google" would both
-    pass. A transaction-scoped advisory lock keyed on the lowercase name
-    serializes concurrent first-inserts instead (no migration required).
-    Callers must resolve companies in sorted-name order so two uploads never
-    acquire overlapping locks in opposite order (deadlock).
+    The database unique constraint covers only exact names, so "Google" and
+    "google" would both pass. A transaction-scoped advisory lock keyed on the
+    lowercase name serializes concurrent first-inserts instead. Callers resolve
+    companies in sorted-name order so two uploads never acquire overlapping
+    locks in opposite order.
     """
     key = display_name.lower()
     await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(key))))
@@ -224,7 +208,8 @@ async def _get_or_create_company(db: AsyncSession, display_name: str) -> Company
         await db.execute(
             select(Company)
             .where(func.lower(Company.name) == key)
-            # deterministic pick: prefer the ATS-tracked row, then the oldest
+            # Deterministic compatibility rule: prefer a source-linked row,
+            # then the oldest employer record.
             .order_by(Company.slug.is_(None), Company.id)
             .limit(1)
         )
@@ -254,9 +239,8 @@ async def replace_employments(
 ) -> None:
     """Replace the profile's employment rows.
 
-    Deletes employment rows only — companies are shared with the ATS scan
-    targets and are NEVER deleted here (unlike replace_projects, which
-    orphan-deletes projects it exclusively owns).
+    Deletes employment rows only. Company identity is shared across profiles
+    and is never deleted here (unlike projects, which can be profile-owned).
     """
     await db.execute(delete(EmploymentHistory).where(EmploymentHistory.profile_id == profile_id))
     valid = [entry for entry in entries if _clean(entry.company_name) and _clean(entry.title)]
