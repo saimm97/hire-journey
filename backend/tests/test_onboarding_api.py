@@ -12,6 +12,7 @@ from app import messages
 from app.models import Company, EmploymentHistory, Profile, ProfileProject, Project, Resume, User
 from app.schemas.profile import ProjectEntry
 from app.services import profile_service
+from app.services.profile import projects
 
 
 async def _seed_profile(db, user_id: int, *, with_resume: bool = True, **fields) -> int:
@@ -302,21 +303,21 @@ async def test_details_requires_profile(client):
 
 async def test_unshared_project_rename_updates_in_place_and_omission_deletes(db, test_user):
     profile_id = await _seed_profile(db, test_user.id, with_resume=False)
-    await profile_service.save_projects(db, profile_id, [ProjectEntry(name="P1")])
+    await projects.save_projects(db, profile_id, [ProjectEntry(name="P1")])
     await db.commit()
-    [project] = await profile_service._load_projects(db, profile_id)
+    [project] = await projects.load_projects(db, profile_id)
 
-    await profile_service.save_projects(
+    await projects.save_projects(
         db, profile_id, [ProjectEntry(project_id=project.project_id, name="P1 renamed")]
     )
     await db.commit()
-    [renamed] = await profile_service._load_projects(db, profile_id)
+    [renamed] = await projects.load_projects(db, profile_id)
     assert renamed.project_id == project.project_id  # same identity
     assert renamed.name == "P1 renamed"
 
-    await profile_service.save_projects(db, profile_id, [])
+    await projects.save_projects(db, profile_id, [])
     await db.commit()
-    assert await profile_service._load_projects(db, profile_id) == []
+    assert await projects.load_projects(db, profile_id) == []
     orphaned = await db.scalar(
         select(func.count()).select_from(Project).where(Project.id == project.project_id)
     )
@@ -344,17 +345,17 @@ async def test_shared_project_rename_copies_on_write(db, test_user):
     project_id = project.id
 
     try:
-        await profile_service.save_projects(
+        await projects.save_projects(
             db, profile_id, [ProjectEntry(project_id=project_id, name="Renamed")]
         )
         await db.commit()
 
         # this profile got a NEW project identity with the new name
-        [mine] = await profile_service._load_projects(db, profile_id)
+        [mine] = await projects.load_projects(db, profile_id)
         assert mine.name == "Renamed"
         assert mine.project_id != project_id
         # the other profile's project is untouched
-        [theirs] = await profile_service._load_projects(db, other_profile_id)
+        [theirs] = await projects.load_projects(db, other_profile_id)
         assert theirs.project_id == project_id
         assert theirs.name == "Shared"
     finally:
@@ -561,9 +562,9 @@ async def test_details_failure_rolls_back_the_preferences_in_the_same_request(
 
     await _seed_profile(db, test_user.id, first_name="Jane", **_PREFS)
     other_profile_id = await _seed_profile(db, other_id, with_resume=False)
-    await profile_service.save_projects(db, other_profile_id, [ProjectEntry(name="Theirs")])
+    await projects.save_projects(db, other_profile_id, [ProjectEntry(name="Theirs")])
     await db.commit()
-    [foreign] = await profile_service._load_projects(db, other_profile_id)
+    [foreign] = await projects.load_projects(db, other_profile_id)
 
     try:
         response = await client.patch(

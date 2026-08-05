@@ -53,6 +53,7 @@ export default function ProfilePage() {
     if (!(await preferences.save())) return
     setEditing(false)
   }
+  
 
   return (
     <AppShell>

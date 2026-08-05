@@ -14,7 +14,7 @@ from app.models import (
     Technology,
 )
 from app.schemas.profile import ProfileDetailsUpdate, ProfileUpdate
-from app.services.profile_service import normalize_technology
+from app.services.profile import normalize_technology
 
 
 def test_profile_update_requires_at_least_one_section():
