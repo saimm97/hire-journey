@@ -174,3 +174,14 @@ export type PreferencesPayload = {
   work_modes_preferred: WorkMode[]
   seniority_level: SeniorityLevel
 }
+
+/** Mirrors backend ProfileUpdate; at least one complete section is required. */
+export type ProfileUpdatePayload =
+  | {
+      details: ProfileDetailsPayload
+      preferences?: PreferencesPayload
+    }
+  | {
+      details?: ProfileDetailsPayload
+      preferences: PreferencesPayload
+    }

@@ -1,18 +1,19 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { ApiError } from '@/lib/api/client'
 import { makeProfile, makeSnapshot } from '@/test/fixtures'
 import { usePreferences } from './usePreferences'
 
 vi.mock('@/lib/api/profile', () => ({
   getOnboarding: vi.fn(),
-  savePreferences: vi.fn(),
+  updateProfile: vi.fn(),
 }))
 
-import { getOnboarding, savePreferences } from '@/lib/api/profile'
+import { getOnboarding, updateProfile } from '@/lib/api/profile'
 
 const getOnboardingMock = vi.mocked(getOnboarding)
-const savePreferencesMock = vi.mocked(savePreferences)
+const updateProfileMock = vi.mocked(updateProfile)
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -88,7 +89,7 @@ describe('usePreferences', () => {
     expect(result.current.fieldErrors.desired_locations).toBe(
       'Add at least one desired location.',
     )
-    expect(savePreferencesMock).not.toHaveBeenCalled()
+    expect(updateProfileMock).not.toHaveBeenCalled()
   })
 
   it('clears stale validation errors when saved preferences are reloaded', async () => {
@@ -109,7 +110,7 @@ describe('usePreferences', () => {
 
   it('sends the exact preferences payload and reports completion', async () => {
     getOnboardingMock.mockResolvedValue(makeSnapshot())
-    savePreferencesMock.mockResolvedValue(makeSnapshot({ onboarding_complete: true }))
+    updateProfileMock.mockResolvedValue(makeSnapshot({ onboarding_complete: true }))
     const { result } = renderHook(() => usePreferences())
     await waitFor(() => expect(result.current.status).toBe('ready'))
 
@@ -128,18 +129,50 @@ describe('usePreferences', () => {
     })
 
     expect(saved).toBe(true)
-    expect(savePreferencesMock).toHaveBeenCalledWith({
-      minimum_salary: 90000,
-      desired_roles: ['Backend Engineer'],
-      desired_locations: ['Berlin'],
-      work_modes_preferred: ['remote'],
-      seniority_level: 'senior',
+    expect(updateProfileMock).toHaveBeenCalledWith({
+      preferences: {
+        minimum_salary: 90000,
+        desired_roles: ['Backend Engineer'],
+        desired_locations: ['Berlin'],
+        work_modes_preferred: ['remote'],
+        seniority_level: 'senior',
+      },
     })
+  })
+
+  it('maps the PATCH section prefix back to preference fields', async () => {
+    getOnboardingMock.mockResolvedValue(makeSnapshot())
+    updateProfileMock.mockRejectedValue(
+      new ApiError(422, {
+        message: 'Some details need fixing.',
+        code: 'validation_error',
+        fields: [
+          {
+            path: ['preferences', 'desired_roles'],
+            message: 'Add at least one desired role.',
+          },
+        ],
+      }),
+    )
+    const { result } = renderHook(() => usePreferences())
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+
+    act(() => {
+      result.current.addRole('Backend Engineer')
+      result.current.addLocation('Berlin')
+      result.current.toggleWorkMode('remote')
+      result.current.setSeniority('senior')
+    })
+    await act(async () => {
+      await result.current.save()
+    })
+
+    expect(result.current.fieldErrors.desired_roles).toBe('Add at least one desired role.')
   })
 
   it('names profile requirements that still prevent completion', async () => {
     getOnboardingMock.mockResolvedValue(makeSnapshot())
-    savePreferencesMock.mockResolvedValue(
+    updateProfileMock.mockResolvedValue(
       makeSnapshot({ profile: makeProfile({ first_name: null }) }),
     )
     const { result } = renderHook(() => usePreferences())

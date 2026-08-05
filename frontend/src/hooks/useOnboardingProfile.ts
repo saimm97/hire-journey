@@ -9,7 +9,7 @@ import {
 } from "react"
 
 import { ApiError } from "@/lib/api/client"
-import { getOnboarding, saveDetails, uploadCv as uploadCvRequest } from "@/lib/api/profile"
+import { getOnboarding, updateProfile, uploadCv as uploadCvRequest } from "@/lib/api/profile"
 import type { OnboardingSnapshot, ProfileDetailsPayload } from "@/lib/api/types"
 import { COMPLETED_DESTINATION } from "@/lib/onboarding/routing"
 import type { ToastData } from "@/components/onboarding/Toast"
@@ -151,8 +151,8 @@ function apiFieldErrors(
 ): FieldErrors {
   const errors: FieldErrors = {}
   for (const field of error.fields) {
-    if (!field.path.length) continue
-    const path = [...field.path]
+    const path = field.path[0] === "details" ? field.path.slice(1) : [...field.path]
+    if (!path.length) continue
     if (path[0] === "projects" && typeof path[1] === "number") {
       const uiIndex = projectPayloadIndexToUiIndex[path[1]]
       if (uiIndex !== undefined) path[1] = uiIndex
@@ -244,7 +244,7 @@ export interface OnboardingProfileOptions {
 
 /**
  * Owns the details step: load or parse a profile, edit every extracted section
- * locally, then persist via PUT /profile/details. Pages stay presentational.
+ * locally, then persist as the complete `details` section via PATCH /profile.
  * Also powers the post-onboarding profile editor via {@link OnboardingProfileOptions}.
  */
 export function useOnboardingProfile({
@@ -622,7 +622,7 @@ export function useOnboardingProfile({
         })),
         technologies,
       }
-      hydrate(await saveDetails(payload))
+      hydrate(await updateProfile({ details: payload }))
       if (successMessage) setToast({ variant: "success", message: successMessage })
       return true
     } catch (error) {

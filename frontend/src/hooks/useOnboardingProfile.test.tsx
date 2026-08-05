@@ -7,14 +7,14 @@ import { useOnboardingProfile } from './useOnboardingProfile'
 
 vi.mock('@/lib/api/profile', () => ({
   getOnboarding: vi.fn(),
-  saveDetails: vi.fn(),
+  updateProfile: vi.fn(),
   uploadCv: vi.fn(),
 }))
 
-import { getOnboarding, saveDetails, uploadCv } from '@/lib/api/profile'
+import { getOnboarding, updateProfile, uploadCv } from '@/lib/api/profile'
 
 const getOnboardingMock = vi.mocked(getOnboarding)
-const saveDetailsMock = vi.mocked(saveDetails)
+const updateProfileMock = vi.mocked(updateProfile)
 const uploadCvMock = vi.mocked(uploadCv)
 
 beforeEach(() => {
@@ -123,7 +123,7 @@ describe('useOnboardingProfile', () => {
       saved = await result.current.saveAndContinue()
     })
     expect(saved).toBe(false)
-    expect(saveDetailsMock).not.toHaveBeenCalled()
+    expect(updateProfileMock).not.toHaveBeenCalled()
     expect(result.current.fieldErrors['employment_history.0.title']).toBe(
       'Enter the job title.',
     )
@@ -157,7 +157,7 @@ describe('useOnboardingProfile', () => {
     })
 
     expect(saved).toBe(false)
-    expect(saveDetailsMock).not.toHaveBeenCalled()
+    expect(updateProfileMock).not.toHaveBeenCalled()
     expect(result.current.fieldErrors).toMatchObject({
       'education.0.end_date': 'The education end date cannot be before its start date.',
       'certifications.0.expires_at': 'The expiration date cannot be before its issue date.',
@@ -182,18 +182,18 @@ describe('useOnboardingProfile', () => {
       last_name: 'Enter your last name.',
       title: 'Enter your professional title.',
     })
-    expect(saveDetailsMock).not.toHaveBeenCalled()
+    expect(updateProfileMock).not.toHaveBeenCalled()
   })
 
   it('maps backend validation paths to fields and clears an error when edited', async () => {
     getOnboardingMock.mockResolvedValue(makeSnapshot())
-    saveDetailsMock.mockRejectedValue(
+    updateProfileMock.mockRejectedValue(
       new ApiError(422, {
         message: 'Some details need fixing.',
         code: 'validation_error',
         fields: [
           {
-            path: ['education', 0, 'start_date'],
+            path: ['details', 'education', 0, 'start_date'],
             message: 'Use YYYY or YYYY-MM.',
           },
         ],
@@ -223,7 +223,7 @@ describe('useOnboardingProfile', () => {
 
   it('maps a stale payload project index back to its visible row', async () => {
     getOnboardingMock.mockResolvedValue(makeSnapshot())
-    saveDetailsMock.mockRejectedValue(
+    updateProfileMock.mockRejectedValue(
       new ApiError(409, {
         message: 'Your projects changed since this form was loaded.',
         code: 'projects_stale',
@@ -287,7 +287,7 @@ describe('useOnboardingProfile', () => {
       ],
     })
     getOnboardingMock.mockResolvedValueOnce(initial).mockResolvedValueOnce(latest)
-    saveDetailsMock.mockRejectedValue(
+    updateProfileMock.mockRejectedValue(
       new ApiError(409, {
         message: 'Your projects changed since this form was loaded.',
         code: 'projects_stale',
@@ -355,7 +355,7 @@ describe('useOnboardingProfile', () => {
         requestId: 'request-123',
       }),
     )
-    saveDetailsMock.mockRejectedValue(
+    updateProfileMock.mockRejectedValue(
       new ApiError(409, {
         message: 'Your projects changed since this form was loaded.',
         code: 'projects_stale',
@@ -390,7 +390,7 @@ describe('useOnboardingProfile', () => {
 
   it('maps the edited state onto the exact details payload', async () => {
     getOnboardingMock.mockResolvedValue(makeSnapshot())
-    saveDetailsMock.mockResolvedValue(makeSnapshot())
+    updateProfileMock.mockResolvedValue(makeSnapshot())
     const { result } = renderHook(() => useOnboardingProfile())
     await waitFor(() => expect(result.current.status).toBe('ready'))
 
@@ -416,12 +416,13 @@ describe('useOnboardingProfile', () => {
     })
 
     expect(saved).toBe(true)
-    const payload = saveDetailsMock.mock.calls[0]![0]
-    expect(payload.location).toBe('Berlin') // trimmed
-    expect(payload.social_links.github_url).toBe('github.com/jane')
-    expect(payload.social_links.linkedin_url).toBeNull() // empty -> null
-    expect(payload.technologies).toEqual(['Python'])
-    expect(payload.employment_history).toEqual([
+    const payload = updateProfileMock.mock.calls[0]![0].details
+    expect(payload).toBeDefined()
+    expect(payload?.location).toBe('Berlin') // trimmed
+    expect(payload?.social_links.github_url).toBe('github.com/jane')
+    expect(payload?.social_links.linkedin_url).toBeNull() // empty -> null
+    expect(payload?.technologies).toEqual(['Python'])
+    expect(payload?.employment_history).toEqual([
       {
         company_name: 'Acme',
         title: 'Dev',
@@ -430,7 +431,7 @@ describe('useOnboardingProfile', () => {
         description: null,
       },
     ])
-    expect(payload.education).toEqual([
+    expect(payload?.education).toEqual([
       {
         institution: 'TU Berlin',
         degree: null,
@@ -439,6 +440,6 @@ describe('useOnboardingProfile', () => {
         end_date: null,
       },
     ])
-    expect(payload.projects).toEqual([]) // the empty row was dropped
+    expect(payload?.projects).toEqual([]) // the empty row was dropped
   })
 })

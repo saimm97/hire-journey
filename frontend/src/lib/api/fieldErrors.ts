@@ -5,12 +5,16 @@ export type FieldErrors = Record<string, string>
 
 export const pathKey = (path: Array<string | number>): string => path.join('.')
 
-/** Flatten an ApiError's structured fields into a path-keyed map (first wins). */
-export function apiFieldErrors(error: ApiError): FieldErrors {
+/**
+ * Flatten structured fields into a path-keyed map (first wins). When a form
+ * edits one PATCH section, omit that section prefix from its local field paths.
+ */
+export function apiFieldErrors(error: ApiError, section?: string): FieldErrors {
   const errors: FieldErrors = {}
   for (const field of error.fields) {
-    if (!field.path.length) continue
-    errors[pathKey(field.path)] ??= field.message
+    const path = section && field.path[0] === section ? field.path.slice(1) : field.path
+    if (!path.length) continue
+    errors[pathKey(path)] ??= field.message
   }
   return errors
 }

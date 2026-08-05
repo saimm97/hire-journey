@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 
 import { ApiError } from "@/lib/api/client"
 import { apiFieldErrors, groupError as matchGroupError, type FieldErrors } from "@/lib/api/fieldErrors"
-import { getOnboarding, savePreferences } from "@/lib/api/profile"
+import { getOnboarding, updateProfile } from "@/lib/api/profile"
 import type { SeniorityLevel, WorkMode } from "@/lib/api/types"
 import { SENIORITY_LEVELS, WORK_MODES } from "@/lib/api/types"
 import { COMPLETED_DESTINATION } from "@/lib/onboarding/routing"
@@ -39,7 +39,8 @@ export interface PreferencesOptions {
 
 /**
  * Owns the preferences step: hydrate from the snapshot, edit locally, persist
- * via PUT /profile/preferences. Redirect decisions surface as `redirectTo`.
+ * as the complete `preferences` section via PATCH /profile. Redirect decisions
+ * surface as `redirectTo`.
  */
 export function usePreferences({
   guardCompleted = true,
@@ -174,12 +175,14 @@ export function usePreferences({
     setFieldErrors({})
     setSaving(true)
     try {
-      const snapshot = await savePreferences({
-        minimum_salary: minimumSalary,
-        desired_roles: roles,
-        desired_locations: locations,
-        work_modes_preferred: workModes,
-        seniority_level: seniority as SeniorityLevel,
+      const snapshot = await updateProfile({
+        preferences: {
+          minimum_salary: minimumSalary,
+          desired_roles: roles,
+          desired_locations: locations,
+          work_modes_preferred: workModes,
+          seniority_level: seniority as SeniorityLevel,
+        },
       })
       if (!snapshot.onboarding_complete) {
         const missingProfile = (snapshot.completion_issues ?? []).filter(
@@ -200,7 +203,9 @@ export function usePreferences({
     } catch (error) {
       // Server-side field errors (e.g. an empty list slipped past the client)
       // land on the exact section instead of a bare toast.
-      if (error instanceof ApiError && error.fields.length) setFieldErrors(apiFieldErrors(error))
+      if (error instanceof ApiError && error.fields.length) {
+        setFieldErrors(apiFieldErrors(error, "preferences"))
+      }
       setToast(errorToast(error))
       return false
     } finally {
