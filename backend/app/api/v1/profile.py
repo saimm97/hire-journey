@@ -15,8 +15,6 @@ from app.exceptions import (
 from app.models.user import User
 from app.schemas.profile import (
     OnboardingSnapshot,
-    PreferencesUpdate,
-    ProfileDetailsUpdate,
     ProfileRead,
     ProfileUpdate,
 )
@@ -54,6 +52,7 @@ async def read_profile(
 ) -> OnboardingSnapshot:
     return await _snapshot(db, current_user)
 
+
 @router.patch("", response_model=OnboardingSnapshot)
 async def update_profile(
     payload: ProfileUpdate,
@@ -66,6 +65,7 @@ async def update_profile(
         payload,
     )
     return await _snapshot(db, current_user)
+
 
 def _validate_upload(file: UploadFile) -> None:
     if not document_parser.is_supported(file.filename or ""):
