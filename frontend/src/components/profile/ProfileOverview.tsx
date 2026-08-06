@@ -8,7 +8,7 @@ import type {
   EditableProject,
   Identity,
   SocialLinksState,
-} from '@/hooks/useOnboardingProfile'
+} from '@/lib/onboarding/profileDraft'
 import type { SeniorityLevel, WorkMode } from '@/lib/api/types'
 
 export interface ProfileOverviewDetails {

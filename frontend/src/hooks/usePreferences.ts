@@ -40,6 +40,11 @@ export interface PreferencesOptions {
   guardCompleted?: boolean
   /** Success toast after saving — for pages that stay put instead of navigating. */
   successMessage?: string
+  /**
+   * Where the snapshot comes from. The profile editor passes a shared loader so
+   * mounting this alongside the details hook costs one request, not two.
+   */
+  loadSnapshot?: () => Promise<OnboardingSnapshot | null>
 }
 
 /**
@@ -50,6 +55,7 @@ export interface PreferencesOptions {
 export function usePreferences({
   guardCompleted = true,
   successMessage,
+  loadSnapshot = getOnboarding,
 }: PreferencesOptions = {}) {
   const [status, setStatus] = useState<PreferencesStatus>("loading")
   const [redirectTo, setRedirectTo] = useState<string | null>(null)
@@ -109,7 +115,7 @@ export function usePreferences({
     let active = true
     void (async () => {
       try {
-        const snapshot = await getOnboarding()
+        const snapshot = await loadSnapshot()
         if (!active) return
         // Deep link without a resume -> back to the profile step; done -> app.
         if (!snapshot || !snapshot.source_resume) {
@@ -137,7 +143,7 @@ export function usePreferences({
     return () => {
       active = false
     }
-  }, [guardCompleted, reloadNonce, hydrate])
+  }, [guardCompleted, reloadNonce, hydrate, loadSnapshot])
 
   const retry = useCallback(() => {
     setStatus("loading")
@@ -211,7 +217,7 @@ export function usePreferences({
     // Server-side field errors (e.g. an empty list slipped past the client)
     // land on the exact section instead of a bare toast.
     if (error instanceof ApiError && error.fields.length) {
-      setFieldErrors(apiFieldErrors(error, "preferences"))
+      setFieldErrors(apiFieldErrors(error, { section: "preferences" }))
     }
     setToast(errorToast(error))
   }, [])

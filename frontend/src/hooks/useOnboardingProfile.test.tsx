@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError } from '@/lib/api/client'
 import { makeProfile, makeSnapshot } from '@/test/fixtures'
-import { useOnboardingProfile } from './useOnboardingProfile'
+import { MAX_UPLOAD_BYTES, useOnboardingProfile } from './useOnboardingProfile'
 
 vi.mock('@/lib/api/profile', () => ({
   getOnboarding: vi.fn(),
@@ -42,47 +42,30 @@ describe('useOnboardingProfile', () => {
     expect(result.current.identity.first_name).toBe('Jane')
   })
 
-  it('hydrates every section from the snapshot', async () => {
+  it('hydrates the form and the read-only values the draft excludes', async () => {
+    // Section mapping is covered by draftFromSnapshot; accountEmail and
+    // sourceResumeId live outside ProfileDraft, so only this covers them.
     getOnboardingMock.mockResolvedValue(
-      makeSnapshot({
-        profile: makeProfile({
-          phone_number: '+49 123',
-          social_links: { github_url: 'https://github.com/jane' },
-          education: [{ institution: 'TU Berlin', degree: 'BSc' }],
-          technologies: ['python'],
-        }),
-        employment_history: [
-          {
-            id: 5,
-            company_name: 'Acme',
-            title: 'Dev',
-            start_date: '2021-05-01',
-            end_date: null,
-            description: null,
-          },
-        ],
-        projects: [
-          {
-            project_id: 9,
-            name: 'Career Engine',
-            summary: null,
-            tech_stack: ['langchain'],
-            github_url: null,
-            deployed_url: null,
-          },
-        ],
-      }),
+      makeSnapshot({ profile: makeProfile({ phone_number: '+49 123' }) }),
     )
     const { result } = renderHook(() => useOnboardingProfile())
     await waitFor(() => expect(result.current.status).toBe('ready'))
 
     expect(result.current.identity.phone_number).toBe('+49 123')
-    expect(result.current.socialLinks.github_url).toBe('https://github.com/jane')
-    expect(result.current.education.items[0]?.institution).toBe('TU Berlin')
-    // API dates (YYYY-MM-DD) become month-input values (YYYY-MM)
-    expect(result.current.employment.items[0]?.start_date).toBe('2021-05')
-    expect(result.current.projects.items[0]?.technologies).toEqual(['langchain'])
     expect(result.current.accountEmail).toBe('jane@example.test')
+  })
+
+  it('loads once and stays settled while the draft is edited', async () => {
+    // The load effect depends on `hydrate`. If that callback ever stops being
+    // reference-stable the effect re-fires on every render, so pin the count.
+    getOnboardingMock.mockResolvedValue(makeSnapshot())
+    const { result, rerender } = renderHook(() => useOnboardingProfile())
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+
+    act(() => result.current.setIdentityField('location', 'Berlin'))
+    rerender()
+
+    expect(getOnboardingMock).toHaveBeenCalledOnce()
   })
 
   it('rejects non-resume files before any upload', async () => {
@@ -95,6 +78,37 @@ describe('useOnboardingProfile', () => {
     })
     expect(result.current.toast?.variant).toBe('error')
     expect(uploadCvMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects an oversized resume before any upload', async () => {
+    getOnboardingMock.mockResolvedValue(null)
+    const { result } = renderHook(() => useOnboardingProfile())
+    await waitFor(() => expect(result.current.status).toBe('empty'))
+
+    const tooBig = new File(['%PDF'], 'cv.pdf', { type: 'application/pdf' })
+    Object.defineProperty(tooBig, 'size', { value: MAX_UPLOAD_BYTES + 1 })
+    await act(async () => {
+      await result.current.uploadCv(tooBig)
+    })
+
+    expect(result.current.toast?.variant).toBe('error')
+    expect(uploadCvMock).not.toHaveBeenCalled()
+  })
+
+  it('accepts a resume exactly at the size limit', async () => {
+    // The check is `>`, not `>=` — the boundary is inclusive.
+    getOnboardingMock.mockResolvedValue(null)
+    uploadCvMock.mockResolvedValue(makeSnapshot())
+    const { result } = renderHook(() => useOnboardingProfile())
+    await waitFor(() => expect(result.current.status).toBe('empty'))
+
+    const atLimit = new File(['%PDF'], 'cv.pdf', { type: 'application/pdf' })
+    Object.defineProperty(atLimit, 'size', { value: MAX_UPLOAD_BYTES })
+    await act(async () => {
+      await result.current.uploadCv(atLimit)
+    })
+
+    expect(uploadCvMock).toHaveBeenCalledOnce()
   })
 
   it('re-uploads replace the current source resume', async () => {
@@ -110,61 +124,9 @@ describe('useOnboardingProfile', () => {
     expect(uploadCvMock).toHaveBeenCalledWith(file, 1) // source_resume_id from fixture
   })
 
-  it('blocks saving when an employment row is missing its title', async () => {
-    getOnboardingMock.mockResolvedValue(makeSnapshot())
-    const { result } = renderHook(() => useOnboardingProfile())
-    await waitFor(() => expect(result.current.status).toBe('ready'))
-
-    act(() => result.current.employment.add())
-    act(() => result.current.employment.update(0, { company_name: 'Acme' }))
-
-    let saved = true
-    await act(async () => {
-      saved = await result.current.saveAndContinue()
-    })
-    expect(saved).toBe(false)
-    expect(updateProfileMock).not.toHaveBeenCalled()
-    expect(result.current.fieldErrors['employment_history.0.title']).toBe(
-      'Enter the job title.',
-    )
-  })
-
-  it('blocks chronologically reversed education and certification dates', async () => {
-    getOnboardingMock.mockResolvedValue(makeSnapshot())
-    const { result } = renderHook(() => useOnboardingProfile())
-    await waitFor(() => expect(result.current.status).toBe('ready'))
-
-    act(() => {
-      result.current.education.add()
-      result.current.certifications.add()
-    })
-    act(() => {
-      result.current.education.update(0, {
-        institution: 'TU Berlin',
-        start_date: '2026',
-        end_date: '2012',
-      })
-      result.current.certifications.update(0, {
-        name: 'AWS',
-        issued_at: '2025-09',
-        expires_at: '2025-03',
-      })
-    })
-
-    let saved = true
-    await act(async () => {
-      saved = await result.current.saveAndContinue()
-    })
-
-    expect(saved).toBe(false)
-    expect(updateProfileMock).not.toHaveBeenCalled()
-    expect(result.current.fieldErrors).toMatchObject({
-      'education.0.end_date': 'The education end date cannot be before its start date.',
-      'certifications.0.expires_at': 'The expiration date cannot be before its issue date.',
-    })
-  })
-
-  it('names every missing core profile field before saving', async () => {
+  it('refuses to send an invalid draft and surfaces the errors inline', async () => {
+    // The rules themselves are covered in profileDraft.test.ts; this pins that
+    // an invalid draft short-circuits before any request.
     getOnboardingMock.mockResolvedValue(
       makeSnapshot({
         profile: makeProfile({ first_name: null, last_name: null, title: null }),
@@ -173,16 +135,15 @@ describe('useOnboardingProfile', () => {
     const { result } = renderHook(() => useOnboardingProfile())
     await waitFor(() => expect(result.current.status).toBe('ready'))
 
+    let saved = true
     await act(async () => {
-      await result.current.saveAndContinue()
+      saved = await result.current.saveAndContinue()
     })
 
-    expect(result.current.fieldErrors).toMatchObject({
-      first_name: 'Enter your first name.',
-      last_name: 'Enter your last name.',
-      title: 'Enter your professional title.',
-    })
+    expect(saved).toBe(false)
     expect(updateProfileMock).not.toHaveBeenCalled()
+    expect(result.current.toast?.variant).toBe('error')
+    expect(result.current.fieldErrors.first_name).toBe('Enter your first name.')
   })
 
   it('maps backend validation paths to fields and clears an error when edited', async () => {
@@ -388,27 +349,14 @@ describe('useOnboardingProfile', () => {
     })
   })
 
-  it('maps the edited state onto the exact details payload', async () => {
+  it('sends a valid draft as the details section of one PATCH', async () => {
+    // Payload shaping is covered by draftToPayload; this pins the wrapping.
     getOnboardingMock.mockResolvedValue(makeSnapshot())
     updateProfileMock.mockResolvedValue(makeSnapshot())
     const { result } = renderHook(() => useOnboardingProfile())
     await waitFor(() => expect(result.current.status).toBe('ready'))
 
-    act(() => {
-      result.current.setIdentityField('location', ' Berlin ')
-      result.current.setSocialLink('github_url', 'github.com/jane')
-      result.current.addTechnology('Python')
-      result.current.employment.add()
-      result.current.education.add()
-    })
-    act(() => {
-      result.current.employment.update(0, { company_name: 'Acme', title: 'Dev', start_date: '2021-05' })
-    })
-    act(() => {
-      result.current.projects.add()
-      result.current.education.update(0, { institution: 'TU Berlin', start_date: '2021' })
-    })
-    // A fully empty project row is silently dropped from the payload.
+    act(() => result.current.setIdentityField('location', ' Berlin '))
 
     let saved = false
     await act(async () => {
@@ -416,30 +364,9 @@ describe('useOnboardingProfile', () => {
     })
 
     expect(saved).toBe(true)
-    const payload = updateProfileMock.mock.calls[0]![0].details
-    expect(payload).toBeDefined()
-    expect(payload?.location).toBe('Berlin') // trimmed
-    expect(payload?.social_links.github_url).toBe('github.com/jane')
-    expect(payload?.social_links.linkedin_url).toBeNull() // empty -> null
-    expect(payload?.technologies).toEqual(['Python'])
-    expect(payload?.employment_history).toEqual([
-      {
-        company_name: 'Acme',
-        title: 'Dev',
-        start_date: '2021-05',
-        end_date: null,
-        description: null,
-      },
-    ])
-    expect(payload?.education).toEqual([
-      {
-        institution: 'TU Berlin',
-        degree: null,
-        field: null,
-        start_date: '2021',
-        end_date: null,
-      },
-    ])
-    expect(payload?.projects).toEqual([]) // the empty row was dropped
+    expect(updateProfileMock).toHaveBeenCalledOnce()
+    const [body] = updateProfileMock.mock.calls[0]!
+    expect(Object.keys(body)).toEqual(['details'])
+    expect(body.details?.location).toBe('Berlin')
   })
 })

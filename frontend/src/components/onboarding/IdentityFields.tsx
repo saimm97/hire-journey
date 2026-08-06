@@ -2,7 +2,7 @@
 
 import { Lock, X } from "lucide-react"
 
-import type { Identity } from "@/hooks/useOnboardingProfile"
+import type { Identity } from "@/lib/onboarding/profileDraft"
 import { Field } from "./Field"
 import { LazyLocationPicker } from "./LazyLocationPicker"
 import { TextField } from "./TextField"

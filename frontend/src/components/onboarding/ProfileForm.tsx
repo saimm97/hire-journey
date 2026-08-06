@@ -2,7 +2,7 @@
 
 import { FileCheck2, Loader2, RefreshCw } from "lucide-react"
 
-import type { OnboardingProfileState } from "@/hooks/useOnboardingProfile"
+import type { ProfileDraftState } from "@/hooks/useProfileDraft"
 import { Button } from "@/components/ui/button"
 import { AutoFilledBadge } from "./AutoFilledBadge"
 import { CertificationEditor } from "./CertificationEditor"
@@ -15,8 +15,38 @@ import { ProjectsEditor } from "./ProjectsEditor"
 import { ResumeSummary } from "./ResumeSummary"
 import { Section } from "./Section"
 
+/**
+ * What this form needs: the editable draft, plus the resume and project-conflict
+ * affordances that sit around it. Deliberately narrower than the details hook —
+ * nothing here should reach for loading, saving, or routing state.
+ */
+export interface ProfileFormState
+  extends Pick<
+    ProfileDraftState,
+    | "identity"
+    | "setIdentityField"
+    | "socialLinks"
+    | "setSocialLink"
+    | "summary"
+    | "setSummary"
+    | "technologies"
+    | "addTechnology"
+    | "removeTechnology"
+    | "education"
+    | "certifications"
+    | "employment"
+    | "projects"
+    | "fieldError"
+  > {
+  accountEmail: string
+  reupload: () => void
+  projectConflict: string | null
+  reloadingProjects: boolean
+  reloadProjects: () => Promise<boolean>
+}
+
 /** The complete, editable details step — every extracted section in one form. */
-export function ProfileForm({ state }: { state: OnboardingProfileState }) {
+export function ProfileForm({ state }: { state: ProfileFormState }) {
   return (
     <div className="divide-y divide-brand-border rounded-xl border border-brand-border bg-white px-6 sm:px-8">
       <div className="flex flex-wrap items-center justify-between gap-3 py-6">
