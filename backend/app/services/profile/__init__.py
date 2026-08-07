@@ -1,4 +1,4 @@
-"""Profile onboarding: read projection, human correction, and resume ingestion.
+"""Profile onboarding: read projection, user updates, and resume ingestion.
 
 Application code should use the names re-exported here. The submodules are
 internal seams — each owns one persistence invariant — and are imported
@@ -9,14 +9,13 @@ directly only by their siblings and by tests targeting a specific invariant:
     employment   company identity (advisory-locked) and employment rows
     projects     project identity, copy-on-write renames, orphan cleanup
     snapshot     the read projection and the computed completion rule
-    correction   PATCH /profile — owns its transaction
+    updates      PATCH /profile — owns its transaction
     ingestion    POST /profile/cv — owns its transaction
 
-Only correction and ingestion commit; every module below them stays inside
+Only updates and ingestion commit; every module below them stays inside
 whatever transaction its caller opened.
 """
 
-from app.services.profile.correction import update_profile
 from app.services.profile.employment import replace_employments
 from app.services.profile.ingestion import process_cv
 from app.services.profile.projects import replace_projects, save_projects
@@ -27,6 +26,7 @@ from app.services.profile.snapshot import (
     onboarding_completion_issues,
 )
 from app.services.profile.technologies import normalize_technology, set_profile_technologies
+from app.services.profile.updates import update_profile
 
 __all__ = [
     "get_snapshot",

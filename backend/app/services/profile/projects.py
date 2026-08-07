@@ -6,7 +6,7 @@ link to it. Two write paths with deliberately different rules:
 * ``replace_projects`` — resume ingestion. No ownership check (the extraction
   can't reference someone else's row), wipes every membership, dedupes by
   normalized name because the LLM surfaces the same project twice.
-* ``save_projects`` — human correction. Ownership is enforced, renaming a
+* ``save_projects`` — a user-supplied update. Ownership is enforced, renaming a
   shared project copies-on-write, omitted memberships are removed.
 
 Both orphan-delete projects left with no memberships.

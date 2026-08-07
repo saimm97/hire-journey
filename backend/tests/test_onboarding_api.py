@@ -1,6 +1,6 @@
 """API tests for the onboarding snapshot and the unified PATCH /profile update.
 
-Both correction screens (details, preferences) persist through one endpoint.
+Both editing screens (details, preferences) persist through one endpoint.
 An omitted section is left untouched; a supplied section is fully replaced.
 """
 
@@ -510,9 +510,7 @@ async def test_explicit_null_section_is_treated_as_omitted(client, db, test_user
     """A client that always sends both keys can null one out instead of branching."""
     await _seed_profile(db, test_user.id, first_name="Jane", title="Eng")
 
-    response = await client.patch(
-        "/api/v1/profile", json={"details": None, "preferences": _PREFS}
-    )
+    response = await client.patch("/api/v1/profile", json={"details": None, "preferences": _PREFS})
 
     assert response.status_code == 200
     body = response.json()

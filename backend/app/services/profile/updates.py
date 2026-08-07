@@ -1,4 +1,9 @@
-"""Human profile correction — the write path behind PATCH /profile.
+"""User-supplied profile updates — the write path behind PATCH /profile.
+
+Serves both callers of that endpoint: the onboarding correction screens, where
+the user fixes what the resume extraction got wrong, and the profile editor,
+where they change stored values later. Neither distinction reaches this far —
+both send the same sections.
 
 This module owns the whole transaction. The section appliers below never
 commit or roll back, which is what makes a combined update atomic: a project
