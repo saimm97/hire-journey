@@ -12,9 +12,17 @@ GOOGLE_EMAIL_UNVERIFIED = "Google email is not verified; cannot link account."
 GOOGLE_ACCOUNT_FAILED = "Could not create account from Google sign-in."
 
 
-PDF_REQUIRED = "Uploaded file must be a PDF."
-PDF_UNREADABLE = "The PDF could not be read; it may be corrupt or password-protected."
-PDF_NO_TEXT = "No text could be extracted from the PDF (scanned images are not supported)."
+PROFILE_NOT_FOUND = "Profile has not been created yet."
+PROJECT_NOT_OWNED = "One or more submitted projects do not belong to this profile."
+PROJECTS_STALE = "Your projects changed in another session. Reload your profile and try again."
+
+DOCUMENT_UNSUPPORTED = "Uploaded file must be a PDF or DOCX document."
+DOCUMENT_UNREADABLE = "The document could not be read; it may be corrupt or password-protected."
+DOCUMENT_NO_TEXT = (
+    "No text could be extracted from the document (scanned images are not supported)."
+)
+LLM_NOT_CONFIGURED = "Resume parsing is not configured on the server."
+EXTRACTION_FAILED = "Could not extract information from the resume. Please try again."
 
 
 def already_registered(field: str) -> str:

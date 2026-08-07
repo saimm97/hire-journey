@@ -1,0 +1,59 @@
+"""Shared fixtures for service/API tests against the live Postgres database."""
+
+import uuid
+from collections.abc import AsyncIterator
+
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import delete, exists
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import get_current_user
+from app.database import AsyncSessionLocal, engine
+from app.main import app
+from app.models.project import ProfileProject, Project
+from app.models.user import User
+
+
+@pytest_asyncio.fixture
+async def db() -> AsyncIterator[AsyncSession]:
+    """Yield a session for setup/teardown, then drop pooled connections tied to this loop."""
+    async with AsyncSessionLocal() as session:
+        yield session
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def test_user(db: AsyncSession) -> AsyncIterator[User]:
+    """Create a throwaway user and cascade-delete it (and its profile) after the test."""
+    user = User(
+        username=f"pytest-{uuid.uuid4().hex[:12]}",
+        email=f"pytest-{uuid.uuid4().hex[:12]}@example.test",
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    # Plain int, safe to use in teardown even after a mid-test rollback
+    # expired the ORM object's attributes.
+    user_id = user.id
+    try:
+        yield user
+    finally:
+        await db.execute(delete(User).where(User.id == user_id))
+        # Deleting the user cascades profile -> memberships at the DB level,
+        # which strands project identity rows (orphan cleanup only runs in the
+        # app's replace paths). Sweep them so tests never leak projects.
+        await db.execute(
+            delete(Project).where(~exists().where(ProfileProject.project_id == Project.id))
+        )
+        await db.commit()
+
+
+@pytest_asyncio.fixture
+async def client(test_user: User) -> AsyncIterator[AsyncClient]:
+    """Yield an HTTP client whose authenticated user is the throwaway test user."""
+    app.dependency_overrides[get_current_user] = lambda: test_user
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as http_client:
+        yield http_client
+    app.dependency_overrides.pop(get_current_user, None)

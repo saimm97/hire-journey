@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { ArrowRight, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 
 import { GoogleAuthButton } from '@/components/auth/GoogleAuthButton'
@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input'
 import { loginWithPassword, registerUser } from '@/lib/api/auth'
 import { ApiError } from '@/lib/api/client'
 import { useAuth } from '@/lib/auth/AuthContext'
+import { postAuthDestination } from '@/lib/onboarding/routing'
 import { cn } from '@/lib/utils'
 
 // match with backend UserCreate constraints
@@ -36,12 +37,12 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>
 
-const LABEL = 'font-mono text-[11px] uppercase tracking-wide text-brand-muted'
+const LABEL = 'text-sm font-medium leading-5 text-brand-ink'
 const FIELD =
-  'h-11 rounded-lg border-brand-border bg-white shadow-sm placeholder:text-brand-muted/60 focus-visible:border-brand-violet focus-visible:ring-2 focus-visible:ring-brand-violet/25'
+  'h-11 rounded-lg border-brand-border bg-white placeholder:text-brand-muted/60 focus-visible:border-brand-primary focus-visible:ring-2 focus-visible:ring-brand-primary/25'
 
 function strengthOf(pw: string): number {
-  if (!pw) return 0;
+  if (!pw) return 0
   let s = 0
   if (pw.length >= 8) s++
   if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) s++
@@ -59,7 +60,8 @@ export default function Register() {
     defaultValues: { username: '', email: '', password: '' },
   })
 
-  const strength = strengthOf(form.watch('password'))
+  const password = useWatch({ control: form.control, name: 'password' })
+  const strength = strengthOf(password)
   const strengthColor = ['bg-brand-border', 'bg-red-500', 'bg-amber-500', 'bg-brand-emerald'][
     strength
   ]
@@ -70,7 +72,7 @@ export default function Register() {
       await registerUser(values) // 1. create account
       await loginWithPassword(values.email, values.password) // 2. auto-login
       await login() // 3. hydrate session
-      router.push('/')
+      router.push(await postAuthDestination()) // 4. new accounts land in onboarding
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'Something went wrong'
       form.setError('root', { message })
@@ -144,7 +146,7 @@ export default function Register() {
                       />
                     ))}
                   </div>
-                  <span className="w-8 font-mono text-[11px] text-brand-muted">
+                  <span className="w-8 text-xs text-brand-muted">
                     {strengthLabel}
                   </span>
                 </div>
@@ -160,7 +162,8 @@ export default function Register() {
           <Button
             type="submit"
             disabled={form.formState.isSubmitting}
-            className="mt-1 h-12 w-full rounded-full bg-brand-coral font-semibold text-white shadow-md hover:bg-brand-coral-dark"
+            size="lg"
+            className="mt-1 w-full"
           >
             {form.formState.isSubmitting ? (
               <>
@@ -169,7 +172,7 @@ export default function Register() {
               </>
             ) : (
               <>
-                Start Your Journey
+                Create account
                 <ArrowRight className="h-5 w-5" />
               </>
             )}

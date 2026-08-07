@@ -1,66 +1,52 @@
 'use client'
 
 import { GoogleOAuthProvider } from '@react-oauth/google'
-import { Check, FileText, Flag, Footprints, Search, Send, Sparkles } from 'lucide-react'
+import { Check, FileText, Footprints, Search } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import type { LucideIcon } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
-type SpineNode = {
+type JourneyItem = {
   label: string
+  description: string
   icon: LucideIcon
-  state: 'done' | 'current' | 'upcoming'
 }
 
-const SPINE: SpineNode[] = [
-  { label: 'Profile', icon: Check, state: 'done' },
-  { label: 'Preferences', icon: Check, state: 'done' },
-  { label: 'Search', icon: Search, state: 'current' },
-  { label: 'Matches', icon: Sparkles, state: 'upcoming' },
-  { label: 'Tailor', icon: FileText, state: 'upcoming' },
-  { label: 'Apply', icon: Send, state: 'upcoming' },
-  { label: 'Track', icon: Flag, state: 'upcoming' },
+const JOURNEY: JourneyItem[] = [
+  {
+    label: 'Upload your resume',
+    description: 'Start with the experience and skills you already have.',
+    icon: FileText,
+  },
+  {
+    label: 'Review your profile',
+    description: 'Confirm every detail and keep your information up to date.',
+    icon: Check,
+  },
+  {
+    label: 'Discover relevant roles',
+    description: 'Use a complete profile to focus on opportunities that fit.',
+    icon: Search,
+  },
 ]
 
-function JourneySpine() {
+function ProductJourney() {
   return (
-    <div className="relative mt-4">
-      {/* Track Background */}
-      <div className="absolute left-4 right-4 top-4 h-[3px] -translate-y-1/2 rounded-full bg-brand-border">
-        {/* Track Active Progress (33.33% reaches the center of the 3rd node "Search") */}
-        <div
-          className="h-full rounded-full bg-gradient-to-r from-brand-emerald to-brand-coral"
-          style={{ width: '33.33%' }}
-        />
-      </div>
-      <ol className="relative flex items-start justify-between">
-        {SPINE.map(({ label, icon: Icon, state }) => (
-          <li key={label} className="flex flex-col items-center gap-2">
-            <span
-              className={cn(
-                'flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300',
-                state === 'done' && 'bg-brand-emerald text-white shadow-sm',
-                state === 'current' &&
-                  'bg-brand-coral text-white shadow-md ring-4 ring-brand-coral/25 scale-105',
-                state === 'upcoming' && 'border-2 border-brand-border bg-white text-brand-muted',
-              )}
-            >
-              <Icon className="h-4 w-4" strokeWidth={2} />
-            </span>
-            <span
-              className={cn(
-                'font-mono text-[11px] tracking-wide transition-colors duration-300',
-                state === 'current' ? 'font-semibold text-brand-coral' : 'text-brand-muted',
-              )}
-            >
-              {label}
-            </span>
-          </li>
-        ))}
-      </ol>
-    </div>
+    <ol className="mt-10 space-y-6" aria-label="How Hire Journey works">
+      {JOURNEY.map(({ label, description, icon: Icon }) => (
+        <li key={label} className="flex gap-4">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-brand-border bg-white text-brand-primary">
+            <Icon className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <h2 className="text-base font-semibold text-brand-ink">{label}</h2>
+            <p className="mt-1 text-sm leading-6 text-brand-muted">{description}</p>
+          </div>
+        </li>
+      ))}
+    </ol>
   )
 }
 
@@ -72,11 +58,12 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     <Link
       href={href}
       className={cn(
-        'flex-1 pb-3 text-center font-display text-xl transition-colors',
+        'flex-1 border-b pb-3 text-center text-base font-semibold transition-colors',
         active
-          ? 'border-b-2 border-brand-violet font-semibold text-brand-violet'
-          : 'border-b border-brand-border text-brand-muted hover:text-brand-ink',
+          ? 'border-brand-primary text-brand-primary'
+          : 'border-brand-border text-brand-muted hover:border-brand-muted hover:text-brand-ink',
       )}
+      aria-current={active ? 'page' : undefined}
     >
       {label}
     </Link>
@@ -84,56 +71,41 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <GoogleOAuthProvider clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!}>
-      <div className="flex h-screen w-full overflow-hidden">
-        {/* Left brand panel */}
-        <aside className="relative hidden w-[55%] flex-col justify-between overflow-hidden bg-brand-paper p-16 lg:flex">
-          <div className="absolute -right-32 -top-32 h-96 w-96 rounded-full bg-brand-violet/20 blur-3xl" />
-          <div className="absolute -bottom-40 -left-32 h-[500px] w-[500px] rounded-full bg-brand-coral/10 blur-3xl" />
-
-          <div className="z-10 flex items-center gap-2 font-display text-2xl font-semibold text-brand-violet">
-            <Footprints className="h-6 w-6" />
+      <div className="flex min-h-screen w-full bg-white">
+        <aside className="hidden w-[55%] flex-col justify-between border-r border-brand-border bg-brand-paper p-12 lg:flex xl:p-16">
+          <div className="flex items-center gap-2 text-2xl font-semibold text-brand-primary">
+            <Footprints className="h-6 w-6" aria-hidden="true" />
             Hire Journey
           </div>
 
-          <div className="z-10 max-w-lg">
-            <h1 className="font-display text-5xl font-extrabold leading-tight text-brand-ink">
-              Your job search,
-              <br />
-              <span className="bg-gradient-to-r from-brand-coral to-brand-violet bg-clip-text italic text-transparent">
-                with momentum.
-              </span>
+          <div className="my-12 max-w-lg">
+            <p className="mb-4 text-sm font-semibold text-brand-primary">A calmer career workspace</p>
+            <h1 className="text-4xl font-semibold leading-tight tracking-tight text-brand-ink xl:text-5xl">
+              A clearer path through your job search.
             </h1>
-            <p className="mt-6 max-w-md text-lg text-brand-muted">
-              From resume to offer, guided the whole way. Ditch the endless applications and step
-              into a structured path.
+            <p className="mt-5 max-w-md text-base leading-7 text-brand-muted">
+              Organize your experience, preferences, and opportunities in one focused place.
             </p>
-            <div className="mt-12">
-              <JourneySpine />
-            </div>
+            <ProductJourney />
           </div>
 
-          <blockquote className="z-10 border-l-2 border-brand-violet pl-6 text-sm text-brand-muted">
-            &ldquo;Finally, a tool that makes job hunting feel like progress, not a black hole.&rdquo;
-            <span className="mt-1 block font-mono text-[11px] opacity-70">
-              — Sarah J., Product Designer
-            </span>
-          </blockquote>
+          <p className="flex items-center gap-3 border-t border-brand-border pt-6 text-sm text-brand-muted">
+            <Check className="h-5 w-5 shrink-0 text-brand-emerald" aria-hidden="true" />
+            Your profile stays editable at every step.
+          </p>
         </aside>
 
-        {/* Right form panel */}
-        <main className="relative z-20 flex h-full w-full flex-col items-center justify-center overflow-y-auto bg-white p-6 shadow-[-20px_0_40px_rgba(35,31,28,0.03)] md:p-12 lg:w-[45%]">
-          <div className="w-full max-w-md">
-            {/* Mobile logo */}
-            <div className="mb-8 flex items-center gap-2 font-display text-2xl font-semibold text-brand-violet lg:hidden">
-              <Footprints className="h-6 w-6" />
+        <main className="flex min-h-screen w-full items-center justify-center overflow-y-auto bg-white p-6 md:p-12 lg:w-[45%]">
+          <div className="w-full max-w-md py-8">
+            <div className="mb-8 flex items-center gap-2 text-2xl font-semibold text-brand-primary lg:hidden">
+              <Footprints className="h-6 w-6" aria-hidden="true" />
               Hire Journey
             </div>
 
-            {/* Tabs = route navigation */}
-            <div className="mb-8 flex">
+            <nav className="mb-8 flex" aria-label="Account access">
               {tab('/register', 'Create account', !onLogin)}
               {tab('/login', 'Sign in', !!onLogin)}
-            </div>
+            </nav>
 
             {children}
           </div>

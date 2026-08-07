@@ -27,7 +27,7 @@ async def get_current_user(
         detail=messages.CREDENTIALS_UNVERIFIED,
         headers=messages.AUTH_HEADER,
     )
-    
+
     raw_token = token or access_token
     if not raw_token:
         raise unauthorized
@@ -38,9 +38,7 @@ async def get_current_user(
     except (jwt.PyJWTError, ValueError, TypeError):
         raise unauthorized
 
-    user = (
-        await db.execute(select(User).where(User.id == user_id))
-    ).scalar_one_or_none()
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if user is None:
         raise unauthorized
     return user

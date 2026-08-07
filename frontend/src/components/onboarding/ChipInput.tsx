@@ -1,0 +1,154 @@
+"use client"
+
+import { useId, useState } from "react"
+import { Plus, type LucideIcon } from "lucide-react"
+
+import { cn } from "@/lib/utils"
+import { Chip } from "./Chip"
+
+interface ChipInputProps {
+  /** The current chips. */
+  values: string[]
+  /** Add a chip. De-duplication lives in the caller so it can be case-aware. */
+  onAdd: (value: string) => void
+  /** Remove a chip by exact value. */
+  onRemove: (value: string) => void
+  placeholder?: string
+  /** Optional type-ahead options, surfaced via a native datalist. */
+  suggestions?: string[]
+  /** Optional icon inside the input (stacked layout only). */
+  icon?: LucideIcon
+  /**
+   * "stacked": a full-width input above the chips (roles, locations).
+   * "inline": a compact add-box that sits among the chips (skills).
+   */
+  layout?: "stacked" | "inline"
+  /** Accessible label for the add control. */
+  addLabel?: string
+  fieldPath?: string
+  error?: string
+}
+
+/**
+ * Removable chips plus an add-input with optional type-ahead. The single source
+ * of chip UI across the wizard: skills, target roles, and locations all use it.
+ */
+export function ChipInput({
+  values,
+  onAdd,
+  onRemove,
+  placeholder,
+  suggestions,
+  icon: Icon,
+  layout = "stacked",
+  addLabel = "Add",
+  fieldPath,
+  error,
+}: ChipInputProps) {
+  const [draft, setDraft] = useState("")
+  const listId = useId()
+  const errorId = error ? `${listId}-error` : undefined
+
+  const commit = () => {
+    onAdd(draft)
+    setDraft("")
+  }
+
+  const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault()
+      commit()
+    }
+  }
+
+  const datalist = suggestions?.length ? (
+    <datalist id={listId}>
+      {suggestions.map((option) => (
+        <option key={option} value={option} />
+      ))}
+    </datalist>
+  ) : null
+
+  const chips = values.map((value) => (
+    <Chip key={value} value={value} onRemove={() => onRemove(value)} />
+  ))
+
+  if (layout === "inline") {
+    return (
+      <div className="space-y-1">
+        <div className="flex flex-wrap gap-2">
+          {chips}
+          <div
+            className={cn(
+              "inline-flex items-center rounded-full border border-brand-border bg-white px-3 py-1",
+              "focus-within:border-brand-primary focus-within:ring-2 focus-within:ring-brand-primary/20",
+              error &&
+                "border-red-500 focus-within:border-red-500 focus-within:ring-red-500/20",
+            )}
+          >
+            <input
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={onKeyDown}
+              placeholder={placeholder}
+              list={suggestions?.length ? listId : undefined}
+              aria-label={addLabel}
+              aria-invalid={error ? true : undefined}
+              aria-describedby={errorId}
+              data-field-path={fieldPath}
+              className="w-24 border-none bg-transparent p-0 text-sm text-brand-ink outline-none placeholder:text-brand-muted/60 focus:ring-0"
+            />
+            <button
+              type="button"
+              onClick={commit}
+              aria-label={addLabel}
+              className="flex items-center text-brand-muted hover:text-brand-primary"
+            >
+              <Plus className="size-4" />
+            </button>
+            {datalist}
+          </div>
+        </div>
+        {error && (
+          <p id={errorId} className="text-xs text-red-600">
+            {error}
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="relative">
+        {Icon && (
+          <Icon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-brand-muted" />
+        )}
+        <input
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder={placeholder}
+          list={suggestions?.length ? listId : undefined}
+          aria-label={addLabel}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={errorId}
+          data-field-path={fieldPath}
+          className={cn(
+            "h-11 w-full rounded-lg border border-brand-border bg-white py-2 pr-3 text-brand-ink outline-none transition-all",
+            "placeholder:text-brand-muted/60 focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20",
+            error && "border-red-500 focus:border-red-500 focus:ring-red-500/20",
+            Icon ? "pl-9" : "pl-3",
+          )}
+        />
+        {datalist}
+      </div>
+      {values.length > 0 && <div className="flex flex-wrap gap-2">{chips}</div>}
+      {error && (
+        <p id={errorId} className="text-xs text-red-600">
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}

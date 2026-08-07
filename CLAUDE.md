@@ -201,9 +201,16 @@ Postgres runs in Docker (`career-engine-db`, db `career_engine`, user/pass `post
 
 Layered, fully async. Dependency direction is **api → services → models/sources**; keep business logic in services, not route handlers.
 
-- `app/api/v1/` — thin FastAPI route handlers, one module per domain (auth, profile, resumes, jobs, search, evaluations, applications, notes), all mounted under `/api/v1` in `api/v1/__init__.py`. Auth via `Depends(get_current_user)` from `api/deps.py` (decodes a PyJWT bearer token → `User`).
-- `app/services/` — business logic. `search_service.run_search` is the core orchestrator: a 4-stage pipeline (create `SearchSession` → `fetch_service.fetch_all` companies concurrently → `job_service.upsert_jobs` with DB-level dedup → `score_service.keyword_score` into `job_scores`). `get_results` is the read path, ranking by score desc.
-- `app/sources/` — ATS adapters (Greenhouse, Ashby, Lever) implementing the `JobSource` Protocol in `base.py` (returns `RawJob` dataclasses). Registered in the `SOURCES` dict (`sources/__init__.py`); `fetch_service` looks adapters up by `company.source.name`. A failed fetch for one company is logged and skipped, never aborting the scan.
+- `app/api/v1/` — thin FastAPI route handlers, one module per domain (auth, profile, resumes, jobs, search, evaluations, notes), all mounted under `/api/v1` in `api/v1/__init__.py`. Auth via `Depends(get_current_user)` from `api/deps.py` (decodes a PyJWT bearer token → `User`).
+- `app/services/` — business logic, split into a write path and a read path:
+  - `search_service.run_scan` (write) — `company_service.get_scannable_companies` → `fetch_service.fetch_all` concurrently → `job_service.upsert_jobs`. Persists jobs only; **no scores are stored**.
+  - `search_service.get_results` (read) — keyword-scores stored jobs in memory against the caller's terms plus their resume skills, ranks, and paginates. Scores are computed per request and never persisted.
+  - The only persisted score is `Evaluation.match_score`, written when a user runs an AI evaluation on one specific job.
+- `app/sources/` — ATS adapters (Greenhouse, Ashby, Lever) implementing the `JobSource` Protocol in `base.py` (returns `RawJob` dataclasses). Registered in the `SOURCES` dict (`sources/__init__.py`). Adapters share one pooled `httpx.AsyncClient` (`base.get_client`), closed by the app lifespan.
+  - **Companies do not record which ATS they use** — there is no `sources` table and no `Company.source` (both dropped in `04cf4b3`). Every adapter is tried against every company slug, because one company can post different jobs on multiple boards. A slug absent from a board simply yields nothing.
+  - To route a *stored* job back to its adapter, use `sources.source_for_url(url)`, which matches the posting host against each adapter's declared `hosts`. Returns `None` for custom ATS domains — callers fall back to trying every adapter.
+  - A failed fetch for one company/adapter is logged and skipped, never aborting the scan.
+  - **Adding an ATS**: create the module implementing `JobSource` (`name`, `hosts`, `fetch`, `fetch_description`) and add one entry to `SOURCES`. Host routing and the contract tests in `tests/test_sources.py` pick it up automatically. Adapters whose list API already returns descriptions return `None` from `fetch_description`.
 - `app/agents/` — LangGraph/LangChain LLM work, isolated from app logic. `evaluator.evaluate_job` returns a Pydantic-structured `EvaluationResult` (match_score + strengths/weaknesses/recommendations).
 - `app/models/` — SQLAlchemy 2.0 ORM (async). All models are imported in `models/__init__.py` (Alembic autogenerate needs them registered on `Base.metadata`). `database.py` exposes the async engine, `AsyncSessionLocal`, and the `get_db` session dependency.
 - `app/schemas/` — Pydantic request/response models. `config.py` — pydantic-settings from `.env`. `exceptions.py` / `messages.py` / `utils/patterns.py` — centralized exceptions, user-facing strings, and regexes (keep them there, don't inline).
@@ -211,6 +218,8 @@ Layered, fully async. Dependency direction is **api → services → models/sour
 ## Key conventions & gotchas
 
 - **Everything DB-facing is async** — use `await`, `AsyncSession`, and `selectinload` for relationships (see `search_service.get_results`). No sync SQLAlchemy sessions.
+- **The `jobs` table contains cross-source duplicates by design.** Dedup is `uq_jobs_url`, but the same role on Greenhouse and Lever has different URLs, so both rows are stored. Any read path that shows jobs to a user must collapse them on a normalized `(company_id, title, location)` key — do not assume one row per real-world posting.
+- **Entities removed in `04cf4b3`** (revised ERD): `sources`, `job_scores`, `search_sessions`, `applications`, `job_notes`. Don't reintroduce them from memory or older docs; scoring is in-memory and companies have no ATS column.
 - **LLM provider fallback**: keys are tried in order **Groq → Gemini → OpenAI** (`config.py`, `agents/evaluator._build_providers`). Any one configured key works; at least one is required for AI features. The README env table under-documents Groq — check `config.py` for the full set.
 - **Job filtering** (title/location allow/block lists) lives in `config/companies.yaml`, loaded by `fetch_service`. Companies to scan are seeded via `scripts/seed_companies.py`.
 - **New model → migration**: add the model, import it in `models/__init__.py`, then `alembic revision --autogenerate`. Migration heads occasionally need merging (see the `*_merge_*` revisions).

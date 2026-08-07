@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input'
 import { loginWithPassword } from '@/lib/api/auth'
 import { ApiError } from '@/lib/api/client'
 import { useAuth } from '@/lib/auth/AuthContext'
+import { COMPLETED_DESTINATION } from '@/lib/onboarding/routing'
 import { cn } from '@/lib/utils'
 
 const schema = z.object({
@@ -30,9 +31,9 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>
 
-const LABEL = 'font-mono text-[11px] uppercase tracking-wide text-brand-muted'
+const LABEL = 'text-sm font-medium leading-5 text-brand-ink'
 const FIELD =
-  'h-11 rounded-lg border-brand-border bg-white shadow-sm placeholder:text-brand-muted/60 focus-visible:border-brand-violet focus-visible:ring-2 focus-visible:ring-brand-violet/25'
+  'h-11 rounded-lg border-brand-border bg-white placeholder:text-brand-muted/60 focus-visible:border-brand-primary focus-visible:ring-2 focus-visible:ring-brand-primary/25'
 
 export default function Login() {
   const router = useRouter()
@@ -48,7 +49,9 @@ export default function Login() {
     try {
       await loginWithPassword(values.identifier, values.password)
       await login()
-      router.push('/')
+      // Returning users default to the dashboard; they can reach onboarding
+      // from the Profile page if their profile is still incomplete.
+      router.push(COMPLETED_DESTINATION)
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'Something went wrong'
       form.setError('root', { message })
@@ -77,12 +80,7 @@ export default function Login() {
             name="password"
             render={({ field }) => (
               <FormItem>
-                <div className="flex items-center justify-between">
-                  <FormLabel className={LABEL}>Password</FormLabel>
-                  <a href="#" className="text-sm text-brand-violet hover:underline">
-                    Forgot?
-                  </a>
-                </div>
+                <FormLabel className={LABEL}>Password</FormLabel>
                 <FormControl>
                   <div className="relative">
                     <Input
@@ -113,7 +111,8 @@ export default function Login() {
           <Button
             type="submit"
             disabled={form.formState.isSubmitting}
-            className="mt-1 h-12 w-full rounded-full bg-brand-violet font-semibold text-white shadow-md hover:bg-brand-violet-dark"
+            size="lg"
+            className="mt-1 w-full"
           >
             {form.formState.isSubmitting ? (
               <>
@@ -121,7 +120,7 @@ export default function Login() {
                 Signing in…
               </>
             ) : (
-              'Sign In'
+              'Sign in'
             )}
           </Button>
         </form>

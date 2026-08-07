@@ -1,8 +1,8 @@
 """Schema-level tests for resume account rules."""
 
+from app.config import settings
 from app.models.resume import Resume
 from app.schemas.resume import ResumeRead
-from app.services.resume_service import MAX_RESUMES_PER_USER
 
 
 def test_resume_model_has_no_slot_or_active_columns():
@@ -14,7 +14,7 @@ def test_resume_model_has_no_slot_or_active_columns():
 
 
 def test_resume_limit_is_two():
-    assert MAX_RESUMES_PER_USER == 2
+    assert settings.max_resumes_per_user == 2
 
 
 def test_resume_response_shape():

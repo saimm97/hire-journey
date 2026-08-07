@@ -1,31 +1,22 @@
-"""Compiled regular expressions for document parsing.
+"""Compiled regular expressions shared across the app.
 
-Every pattern the extractors rely on lives here so the parsing modules stay
-readable and no expression is duplicated across files. Import what you need:
-``from app.utils import patterns`` then reference ``patterns.EMAIL_RE`` etc.
+Every pattern lives here so no expression is duplicated across files. Import
+what you need: ``from app.utils import patterns`` then ``patterns.ISO_MONTH_RE``.
 """
 
 import re
 
-# Contact details
-EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
-LINKEDIN_RE = re.compile(r"(?:https?://)?(?:www\.)?linkedin\.com/(?:in|pub)/[\w%-]+", re.I)
-GITHUB_RE = re.compile(r"(?:https?://)?(?:www\.)?github\.com/[\w-]+(?:/[\w.-]+)?", re.I)
-URL_RE = re.compile(r"https?://[^\s)\]]+", re.I)
-PHONE_RE = re.compile(r"(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{2,4}\)?[\s.-]?){2,4}\d{2,4}")
-NAME_RE = re.compile(r"^[A-Z][A-Za-z'’.-]+(?:\s+[A-Z][A-Za-z'’.-]+){1,3}$")
+# Lenient date normalization for LLM-extracted resume dates
+ISO_MONTH_RE = re.compile(r"^(\d{4})[-/](\d{1,2})$")
+YEAR_ONLY_RE = re.compile(r"^(\d{4})$")
+MONTH_NAME_RE = re.compile(r"^([A-Za-z]{3,9})\.?,?\s+(\d{4})$")
+PRESENT_RE = re.compile(r"^(present|current|now|ongoing)$", re.I)
 
-# Skills: collapse padded space runs to a delimiter, then split on separators.
-WS_RUN_RE = re.compile(r"[ \t]{2,}")
-SKILL_SPLIT_RE = re.compile(r"[,;|/]+|[•·▪◦]+")
+# Strict month format for user-edited payloads
+STRICT_MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+# Education/certification dates may be year-only (YYYY) or a full month (YYYY-MM);
+# resumes routinely list just the year and we preserve that fidelity.
+STRICT_YEAR_OR_MONTH_RE = re.compile(r"^\d{4}(-(0[1-9]|1[0-2]))?$")
 
-# Projects
-BULLET_RE = re.compile(r"^[•·▪◦\-–*]\s*")
-TECH_LABEL_RE = re.compile(
-    r"^(?:tech(?:nologies)?|tech stack|stack|built with|tools)\s*[:\-]\s*", re.I
-)
-LINK_LINE_RE = re.compile(
-    r"^(?:https?://|www\.|[\w-]+\.(?:com|io|dev|org|net|app|co|ai))\S*$", re.I
-)
-NAME_SPLIT_RE = re.compile(r"\s[|–—-]\s")
-PAREN_RE = re.compile(r"\((.*?)\)")
+# URL normalization: a schemeless value that still looks like a web address
+DOMAIN_LIKE_RE = re.compile(r"^[\w-]+(?:\.[\w-]+)+(?:/\S*)?$")

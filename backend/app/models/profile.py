@@ -9,9 +9,7 @@ from app.database import Base
 
 if TYPE_CHECKING:
     from app.models.employment import EmploymentHistory
-    from app.models.evaluation import Evaluation
     from app.models.project import ProfileProject
-    from app.models.tailored_resume import TailoredResume
     from app.models.technology import ProfileTechnology
     from app.models.user import User
 
@@ -83,11 +81,5 @@ class Profile(Base):
         back_populates="profile", cascade="all, delete-orphan"
     )
     technologies: Mapped[list["ProfileTechnology"]] = relationship(
-        back_populates="profile", cascade="all, delete-orphan"
-    )
-    evaluations: Mapped[list["Evaluation"]] = relationship(
-        back_populates="profile", cascade="all, delete-orphan"
-    )
-    tailored_resumes: Mapped[list["TailoredResume"]] = relationship(
         back_populates="profile", cascade="all, delete-orphan"
     )

@@ -1,5 +1,7 @@
 """Focused tests for the onboarding profile schema and normalization rules."""
 
+import pytest
+from pydantic import ValidationError
 
 from app.database import Base
 from app.models import (
@@ -11,20 +13,25 @@ from app.models import (
     Project,
     Technology,
 )
-from app.schemas.profile import ProfileUpdate
-from app.services.profile_service import normalize_technology
+from app.schemas.profile import ProfileDetailsUpdate, ProfileUpdate
+from app.services.profile import normalize_technology
 
 
-def test_profile_update_normalizes_nullable_arrays():
-    update = ProfileUpdate.model_validate(
-        {
-            "desired_roles": None,
-            "work_modes_preferred": ["remote"],
-        }
-    )
+def test_profile_update_requires_at_least_one_section():
+    with pytest.raises(ValidationError):
+        ProfileUpdate.model_validate({})
 
-    assert update.desired_roles == []
-    assert update.work_modes_preferred == ["remote"]
+
+def test_profile_update_rejects_unknown_keys():
+    """Sections are full replacements, so a dropped typo would clear the rest."""
+    with pytest.raises(ValidationError):
+        ProfileUpdate.model_validate({"details": {}, "prefrences": {}})
+
+    with pytest.raises(ValidationError):
+        ProfileDetailsUpdate.model_validate({"frist_name": "Ada"})
+
+    with pytest.raises(ValidationError):
+        ProfileDetailsUpdate.model_validate({"projects": [{"name": "P", "projct_id": 1}]})
 
 
 def test_technology_normalization_is_case_and_whitespace_insensitive():
@@ -52,8 +59,6 @@ def test_onboarding_tables_are_registered_with_expected_names():
 
 def test_removed_profile_and_project_fields_are_not_in_metadata():
     assert {"salary_currency", "salary_period"}.isdisjoint(Profile.__table__.columns.keys())
-    assert {"role", "contribution_summary"}.isdisjoint(
-        ProfileProject.__table__.columns.keys()
-    )
+    assert {"role", "contribution_summary"}.isdisjoint(ProfileProject.__table__.columns.keys())
     assert "job_notes" not in Base.metadata.tables
     assert "applications" not in Base.metadata.tables
