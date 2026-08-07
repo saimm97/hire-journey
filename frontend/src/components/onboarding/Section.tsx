@@ -1,0 +1,46 @@
+import type { ReactNode } from "react"
+
+import { cn } from "@/lib/utils"
+
+interface SectionProps {
+  title: string
+  action?: ReactNode
+  fieldPath?: string
+  error?: string
+  children: ReactNode
+}
+
+/** A titled form section with an optional right-aligned action. */
+export function Section({ title, action, fieldPath, error, children }: SectionProps) {
+  const errorId = fieldPath && error ? `section-${fieldPath}-error` : undefined
+
+  return (
+    <section
+      className={cn(
+        "space-y-4 py-8",
+        error && "rounded-lg bg-red-50/50 px-4 ring-1 ring-inset ring-red-500",
+      )}
+      data-field-path={fieldPath}
+      tabIndex={fieldPath ? -1 : undefined}
+      aria-describedby={errorId}
+    >
+      <div className="flex items-center justify-between">
+        <h3
+          className={cn(
+            "text-xl font-semibold leading-7 tracking-tight text-brand-ink",
+            error && "text-red-600",
+          )}
+        >
+          {title}
+        </h3>
+        {action}
+      </div>
+      {error && (
+        <p id={errorId} className="text-sm text-red-600">
+          {error}
+        </p>
+      )}
+      {children}
+    </section>
+  )
+}

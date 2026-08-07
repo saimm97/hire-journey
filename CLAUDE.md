@@ -4,7 +4,7 @@
 
 ## Identity
 
-Name: Nihal
+Name: Aneeb
 Role: Software Engineer
 Background: AI/ML, Full-Stack Development
 Strongest Areas: Python, Machine Learning, backend logic, AI workflows
@@ -42,6 +42,19 @@ If uncertain about technical details, APIs, versions, behavior, or statistics:
 * explicitly say you are unsure
 * do not hallucinate
 * do not invent implementation details
+
+---
+
+## Learning Mode (Teach-and-Quiz)
+
+Whenever we implement something or try something new (a new library, pattern, service, architecture decision, or technique):
+
+1. Explain it in depth before/while doing it — what it is, why we're using it here, how it works under the hood, and the tradeoffs against alternatives. Do not just ship the code silently.
+2. At the end of that work, quiz me on the concepts — ask 2–4 pointed questions that test understanding (not trivia recall), so the knowledge sticks.
+
+The goal is that I keep learning the *why*, not just the *what*. Favor questions that probe edge cases, tradeoffs, and "what would break if…" reasoning over definitions.
+
+This applies to new/unfamiliar work — not to trivial, repetitive, or purely mechanical edits.
 
 ---
 
@@ -158,3 +171,79 @@ When generating project structure:
 Always optimize for long-term maintainability and developer clarity.
 Dont Repeat Yourself!
 
+---
+
+# Codebase Guide — Career Engine (Hire Journey)
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+AI-powered job search platform: upload a resume → discover jobs from ATS boards → keyword-score them → LLM-evaluate fit → tailor applications. Two top-level apps: `backend/` (FastAPI) and `frontend/` (Next.js).
+
+## Commands
+
+All backend commands run from `backend/` with the venv active (`source .venv/bin/activate`):
+
+```bash
+uvicorn app.main:app --reload      # dev server → http://localhost:8000 (docs at /docs)
+pytest                             # run all tests
+pytest tests/test_security.py      # single file
+pytest tests/test_security.py::test_name -q   # single test
+ruff check .                       # lint (rules E, F, I; line-length 100)
+ruff check --fix .                 # autofix
+
+alembic upgrade head                          # apply migrations (also needed on fresh setup)
+alembic revision --autogenerate -m "message"  # generate a migration AFTER changing a model
+```
+
+Postgres runs in Docker (`career-engine-db`, db `career_engine`, user/pass `postgres`); see README for the one-time `docker run`. Frontend (from `frontend/`): `npm run dev`, `npm run build`, `npm run lint`.
+
+## Backend architecture
+
+Layered, fully async. Dependency direction is **api → services → models/sources**; keep business logic in services, not route handlers.
+
+- `app/api/v1/` — thin FastAPI route handlers, one module per domain (auth, profile, resumes, jobs, search, evaluations, notes), all mounted under `/api/v1` in `api/v1/__init__.py`. Auth via `Depends(get_current_user)` from `api/deps.py` (decodes a PyJWT bearer token → `User`).
+- `app/services/` — business logic, split into a write path and a read path:
+  - `search_service.run_scan` (write) — `company_service.get_scannable_companies` → `fetch_service.fetch_all` concurrently → `job_service.upsert_jobs`. Persists jobs only; **no scores are stored**.
+  - `search_service.get_results` (read) — keyword-scores stored jobs in memory against the caller's terms plus their resume skills, ranks, and paginates. Scores are computed per request and never persisted.
+  - The only persisted score is `Evaluation.match_score`, written when a user runs an AI evaluation on one specific job.
+- `app/sources/` — ATS adapters (Greenhouse, Ashby, Lever) implementing the `JobSource` Protocol in `base.py` (returns `RawJob` dataclasses). Registered in the `SOURCES` dict (`sources/__init__.py`). Adapters share one pooled `httpx.AsyncClient` (`base.get_client`), closed by the app lifespan.
+  - **Companies do not record which ATS they use** — there is no `sources` table and no `Company.source` (both dropped in `04cf4b3`). Every adapter is tried against every company slug, because one company can post different jobs on multiple boards. A slug absent from a board simply yields nothing.
+  - To route a *stored* job back to its adapter, use `sources.source_for_url(url)`, which matches the posting host against each adapter's declared `hosts`. Returns `None` for custom ATS domains — callers fall back to trying every adapter.
+  - A failed fetch for one company/adapter is logged and skipped, never aborting the scan.
+  - **Adding an ATS**: create the module implementing `JobSource` (`name`, `hosts`, `fetch`, `fetch_description`) and add one entry to `SOURCES`. Host routing and the contract tests in `tests/test_sources.py` pick it up automatically. Adapters whose list API already returns descriptions return `None` from `fetch_description`.
+- `app/agents/` — LangGraph/LangChain LLM work, isolated from app logic. `evaluator.evaluate_job` returns a Pydantic-structured `EvaluationResult` (match_score + strengths/weaknesses/recommendations).
+- `app/models/` — SQLAlchemy 2.0 ORM (async). All models are imported in `models/__init__.py` (Alembic autogenerate needs them registered on `Base.metadata`). `database.py` exposes the async engine, `AsyncSessionLocal`, and the `get_db` session dependency.
+- `app/schemas/` — Pydantic request/response models. `config.py` — pydantic-settings from `.env`. `exceptions.py` / `messages.py` / `utils/patterns.py` — centralized exceptions, user-facing strings, and regexes (keep them there, don't inline).
+
+## Key conventions & gotchas
+
+- **Everything DB-facing is async** — use `await`, `AsyncSession`, and `selectinload` for relationships (see `search_service.get_results`). No sync SQLAlchemy sessions.
+- **The `jobs` table contains cross-source duplicates by design.** Dedup is `uq_jobs_url`, but the same role on Greenhouse and Lever has different URLs, so both rows are stored. Any read path that shows jobs to a user must collapse them on a normalized `(company_id, title, location)` key — do not assume one row per real-world posting.
+- **Entities removed in `04cf4b3`** (revised ERD): `sources`, `job_scores`, `search_sessions`, `applications`, `job_notes`. Don't reintroduce them from memory or older docs; scoring is in-memory and companies have no ATS column.
+- **LLM provider fallback**: keys are tried in order **Groq → Gemini → OpenAI** (`config.py`, `agents/evaluator._build_providers`). Any one configured key works; at least one is required for AI features. The README env table under-documents Groq — check `config.py` for the full set.
+- **Job filtering** (title/location allow/block lists) lives in `config/companies.yaml`, loaded by `fetch_service`. Companies to scan are seeded via `scripts/seed_companies.py`.
+- **New model → migration**: add the model, import it in `models/__init__.py`, then `alembic revision --autogenerate`. Migration heads occasionally need merging (see the `*_merge_*` revisions).
+- Python **3.13** required (3.14 has no wheels for several deps). Ruff line-length 100; pytest is `asyncio_mode = "auto"`.
+
+## Frontend
+
+⚠️ The README still describes the *old* static HTML/JS frontend — that has been replaced. `frontend/` is now a **Next.js 16 + React 19 + Tailwind v4** app (App Router, TypeScript). Per `frontend/AGENTS.md`, this Next.js version has **breaking changes vs. training data** — read the relevant guide in `frontend/node_modules/next/dist/docs/` before writing frontend code; do not assume older Next.js conventions.
+
+> Note: `CLAUDE.md` imports `@PRD.md`, which is not present in the repo — that import currently resolves to nothing.
+
+<<<<<<< Updated upstream
+=======
+## Agent skills
+
+### Issue tracker
+
+Work is tracked in Jira project HIJ (`hirejourney`). Agents prepare ticket drafts only and must not create, update, transition, comment on, or label Jira issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Ticket drafts use the canonical triage labels `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This repository uses a single-context domain layout: `CONTEXT.md` at the repository root and architectural decisions under `docs/adr/`. See `docs/agents/domain.md`.
+>>>>>>> Stashed changes

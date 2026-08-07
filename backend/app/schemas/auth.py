@@ -1,6 +1,5 @@
 """Request and response models for the auth API."""
 
-import uuid
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -15,7 +14,7 @@ class UserCreate(BaseModel):
 class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    user_id: uuid.UUID
+    id: int
     username: str
     email: EmailStr
     created_at: datetime

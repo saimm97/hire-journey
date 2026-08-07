@@ -14,7 +14,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+backend/.venv/lib/
 lib64/
 parts/
 sdist/
@@ -127,8 +127,8 @@ ipython_config.py
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
 __pypackages__/
 
-# Celery stuff
-celerybeat-schedule
+# Celery Beat runtime state (including SQLite sidecar files)
+celerybeat-schedule*
 celerybeat.pid
 
 # Redis
@@ -222,6 +222,5 @@ __marimo__/
 /.venv
 /venv
 /env
-/lib
 
 PRD.md

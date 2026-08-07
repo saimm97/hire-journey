@@ -22,9 +22,25 @@ class GoogleAuthError(Exception):
     """Google sign-in could not be completed."""
 
 
-class PdfUnreadableError(Exception):
-    """The bytes could not be opened or read as a PDF."""
+class ProfileNotFoundError(Exception):
+    """The user has no profile yet (onboarding has not started)."""
 
 
-class PdfNoTextError(Exception):
-    """The PDF opened but contained no extractable text."""
+class ProjectOwnershipError(Exception):
+    """A submitted project_id does not belong to the current profile."""
+
+    def __init__(self, message: str, row_index: int) -> None:
+        self.row_index = row_index
+        super().__init__(message)
+
+
+class DocumentParseError(Exception):
+    """The uploaded document could not be read or contained no extractable text."""
+
+
+class LLMNotConfiguredError(Exception):
+    """No LLM provider API key is configured; extraction cannot run."""
+
+
+class ExtractionError(Exception):
+    """Every configured LLM provider failed to return schema-valid data."""
