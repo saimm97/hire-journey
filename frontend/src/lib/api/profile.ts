@@ -1,8 +1,7 @@
 import { ApiError, apiRequest } from './client'
 import type {
   OnboardingSnapshot,
-  PreferencesPayload,
-  ProfileDetailsPayload,
+  ProfileUpdatePayload,
 } from './types'
 
 /** The onboarding snapshot, or null when onboarding hasn't started yet (404). */
@@ -31,15 +30,10 @@ export function uploadCv(
   })
 }
 
-/** Save the corrected details step (full replacement of profile-owned collections). */
-export function saveDetails(payload: ProfileDetailsPayload): Promise<OnboardingSnapshot> {
-  return apiRequest<OnboardingSnapshot>('/profile/details', { method: 'PUT', body: payload })
-}
-
-/** Save the preferences step; the returned snapshot carries the fresh completion state. */
-export function savePreferences(payload: PreferencesPayload): Promise<OnboardingSnapshot> {
-  return apiRequest<OnboardingSnapshot>('/profile/preferences', {
-    method: 'PUT',
+/** Update one or both complete profile sections and return the refreshed snapshot. */
+export function updateProfile(payload: ProfileUpdatePayload): Promise<OnboardingSnapshot> {
+  return apiRequest<OnboardingSnapshot>('/profile', {
+    method: 'PATCH',
     body: payload,
   })
 }

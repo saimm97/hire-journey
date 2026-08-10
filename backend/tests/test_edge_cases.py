@@ -118,10 +118,15 @@ async def test_salary_overflow_rejected(client, db, test_user):
     payload = {
         "minimum_salary": 3_000_000_000,  # would overflow the int32 column
         "desired_roles": ["backend"],
+        "desired_locations": ["Berlin"],
         "work_modes_preferred": ["remote"],
         "seniority_level": "senior",
     }
-    assert (await client.put("/api/v1/profile/preferences", json=payload)).status_code == 422
+    response = await client.patch("/api/v1/profile", json={"preferences": payload})
+    assert response.status_code == 422
+    # Fails on the salary specifically, not on an incidentally missing field.
+    paths = {tuple(field["path"]) for field in response.json()["error"]["fields"]}
+    assert paths == {("preferences", "minimum_salary")}
 
 
 async def test_oversized_collections_rejected(client, db, test_user):
@@ -130,18 +135,22 @@ async def test_oversized_collections_rejected(client, db, test_user):
     await _seed_profile(db, test_user.id)
     too_many_roles = {
         "desired_roles": [f"role-{i}" for i in range(101)],
+        "desired_locations": ["Berlin"],
         "work_modes_preferred": ["remote"],
         "seniority_level": "senior",
     }
-    assert (await client.put("/api/v1/profile/preferences", json=too_many_roles)).status_code == 422
+    response = await client.patch("/api/v1/profile", json={"preferences": too_many_roles})
+    assert response.status_code == 422
 
     ancient_month = {
         "employment_history": [{"company_name": "X", "title": "Y", "start_date": "1850-01"}]
     }
-    assert (await client.put("/api/v1/profile/details", json=ancient_month)).status_code == 422
+    response = await client.patch("/api/v1/profile", json={"details": ancient_month})
+    assert response.status_code == 422
 
     huge_url = {"social_links": {"github_url": "https://example.com/" + "a" * 300}}
-    assert (await client.put("/api/v1/profile/details", json=huge_url)).status_code == 422
+    response = await client.patch("/api/v1/profile", json={"details": huge_url})
+    assert response.status_code == 422
 
 
 async def test_upload_size_enforced_after_read(client, monkeypatch):

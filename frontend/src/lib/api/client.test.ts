@@ -20,7 +20,7 @@ async function capturedApiError(body: unknown): Promise<ApiError> {
   )
 
   try {
-    await apiRequest('/profile/details', { method: 'PUT', body: {} })
+    await apiRequest('/profile', { method: 'PATCH', body: { details: {} } })
     throw new Error('Expected apiRequest to reject')
   } catch (error) {
     expect(error).toBeInstanceOf(ApiError)

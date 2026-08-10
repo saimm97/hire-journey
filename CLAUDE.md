@@ -230,3 +230,17 @@ Layered, fully async. Dependency direction is **api → services → models/sour
 ⚠️ The README still describes the *old* static HTML/JS frontend — that has been replaced. `frontend/` is now a **Next.js 16 + React 19 + Tailwind v4** app (App Router, TypeScript). Per `frontend/AGENTS.md`, this Next.js version has **breaking changes vs. training data** — read the relevant guide in `frontend/node_modules/next/dist/docs/` before writing frontend code; do not assume older Next.js conventions.
 
 > Note: `CLAUDE.md` imports `@PRD.md`, which is not present in the repo — that import currently resolves to nothing.
+
+## Agent skills
+
+### Issue tracker
+
+Work is tracked in Jira project HIJ (`hirejourney`). Agents prepare ticket drafts only and must not create, update, transition, comment on, or label Jira issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Ticket drafts use the canonical triage labels `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This repository uses a single-context domain layout: `CONTEXT.md` at the repository root and architectural decisions under `docs/adr/`. See `docs/agents/domain.md`.

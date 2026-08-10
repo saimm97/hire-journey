@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -7,14 +7,11 @@ import ProfilePage from './page'
 
 const mocks = vi.hoisted(() => ({
   replace: vi.fn(),
-  detailsRetry: vi.fn(),
-  preferencesRetry: vi.fn(),
-  detailsDismiss: vi.fn(),
-  preferencesDismiss: vi.fn(),
-  saveDetails: vi.fn(),
-  savePreferences: vi.fn(),
-  details: {} as Record<string, unknown>,
-  preferences: {} as Record<string, unknown>,
+  retryAll: vi.fn(),
+  startEditing: vi.fn(),
+  cancelEditing: vi.fn(),
+  saveProfile: vi.fn(),
+  editor: {} as Record<string, unknown>,
 }))
 
 vi.mock('next/navigation', () => ({
@@ -49,71 +46,64 @@ vi.mock('@/components/onboarding/Toast', () => ({
   Toast: () => null,
 }))
 
-vi.mock('@/hooks/useOnboardingProfile', () => ({
-  useOnboardingProfile: () => mocks.details,
+vi.mock('@/hooks/useProfileEditor', () => ({
+  useProfileEditor: () => mocks.editor,
 }))
 
-vi.mock('@/hooks/usePreferences', () => ({
-  usePreferences: () => mocks.preferences,
-}))
-
-function readyDetails() {
+/** The editor surface this page renders; orchestration is covered by its own hook. */
+function readyEditor(overrides: Record<string, unknown> = {}) {
   return {
-    status: 'ready',
-    redirectTo: null,
-    loadError: null,
-    retry: mocks.detailsRetry,
-    identity: {
-      first_name: 'Jane',
-      last_name: 'Smith',
-      phone_number: '',
-      location: '',
-      title: 'Engineer',
+    details: {
+      status: 'ready',
+      identity: {
+        first_name: 'Jane',
+        last_name: 'Smith',
+        phone_number: '',
+        location: '',
+        title: 'Engineer',
+      },
+      accountEmail: 'jane@example.test',
+      socialLinks: { github_url: '', linkedin_url: '', portfolio_url: '' },
+      summary: '',
+      technologies: [],
+      employment: { items: [] },
+      education: { items: [] },
+      certifications: { items: [] },
+      projects: { items: [] },
+      uploadCv: vi.fn(),
+      toast: null,
+      dismissToast: vi.fn(),
     },
-    accountEmail: 'jane@example.test',
-    socialLinks: { github_url: '', linkedin_url: '', portfolio_url: '' },
-    summary: '',
-    technologies: [],
-    employment: { items: [] },
-    education: { items: [] },
-    certifications: { items: [] },
-    projects: { items: [] },
-    saving: false,
-    saveAndContinue: mocks.saveDetails,
-    uploadCv: vi.fn(),
-    toast: null,
-    dismissToast: mocks.detailsDismiss,
-  }
-}
-
-function readyPreferences() {
-  return {
-    status: 'ready',
+    preferences: {
+      roles: [],
+      locations: [],
+      workModes: [],
+      seniority: null,
+      minimumSalary: null,
+      toast: null,
+      dismissToast: vi.fn(),
+    },
     redirectTo: null,
+    ready: true,
+    loading: false,
     loadError: null,
-    retry: mocks.preferencesRetry,
-    roles: [],
-    locations: [],
-    workModes: [],
-    seniority: null,
-    minimumSalary: null,
+    retryAll: mocks.retryAll,
+    editing: false,
+    startEditing: mocks.startEditing,
+    cancelEditing: mocks.cancelEditing,
     saving: false,
-    save: mocks.savePreferences,
-    toast: null,
-    dismissToast: mocks.preferencesDismiss,
+    saveProfile: mocks.saveProfile,
+    ...overrides,
   }
 }
 
 describe('ProfilePage read and edit modes', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.details = readyDetails()
-    mocks.preferences = readyPreferences()
-    mocks.saveDetails.mockResolvedValue(true)
-    mocks.savePreferences.mockResolvedValue(true)
+    mocks.editor = readyEditor()
   })
 
-  it('starts in read mode and enters the existing editors on demand', async () => {
+  it('starts in read mode and opens the editors on demand', async () => {
     const user = userEvent.setup()
     render(<ProfilePage />)
 
@@ -122,49 +112,61 @@ describe('ProfilePage read and edit modes', () => {
 
     await user.click(screen.getByRole('button', { name: 'Edit profile' }))
 
+    expect(mocks.startEditing).toHaveBeenCalledOnce()
+  })
+
+  it('renders both editors and the save control while editing', () => {
+    mocks.editor = readyEditor({ editing: true })
+    render(<ProfilePage />)
+
     expect(screen.getByText('Details editor')).toBeVisible()
     expect(screen.getByText('Preferences editor')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Save profile' })).toBeVisible()
+    expect(screen.queryByLabelText('Profile overview')).not.toBeInTheDocument()
   })
 
-  it('cancels by reloading both saved aggregates before returning to read mode', async () => {
+  it('wires Save and Cancel to the editor', async () => {
     const user = userEvent.setup()
+    mocks.editor = readyEditor({ editing: true })
     render(<ProfilePage />)
 
-    await user.click(screen.getByRole('button', { name: 'Edit profile' }))
+    await user.click(screen.getByRole('button', { name: 'Save profile' }))
+    expect(mocks.saveProfile).toHaveBeenCalledOnce()
+
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
-
-    expect(mocks.detailsRetry).toHaveBeenCalledOnce()
-    expect(mocks.preferencesRetry).toHaveBeenCalledOnce()
-    expect(mocks.detailsDismiss).toHaveBeenCalledOnce()
-    expect(mocks.preferencesDismiss).toHaveBeenCalledOnce()
-    expect(screen.getByLabelText('Profile overview')).toBeVisible()
+    expect(mocks.cancelEditing).toHaveBeenCalledOnce()
   })
 
-  it('saves details before preferences and returns to read mode only after both succeed', async () => {
-    const user = userEvent.setup()
+  it('disables Save while a combined save is in flight', () => {
+    mocks.editor = readyEditor({ editing: true, saving: true })
     render(<ProfilePage />)
 
-    await user.click(screen.getByRole('button', { name: 'Edit profile' }))
-    await user.click(screen.getByRole('button', { name: 'Save profile' }))
-
-    await waitFor(() => expect(mocks.savePreferences).toHaveBeenCalledOnce())
-    expect(mocks.saveDetails.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.savePreferences.mock.invocationCallOrder[0],
-    )
-    expect(screen.getByLabelText('Profile overview')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Save profile' })).toBeDisabled()
   })
 
-  it('keeps the editor and existing inline-error surface when details do not save', async () => {
-    const user = userEvent.setup()
-    mocks.saveDetails.mockResolvedValue(false)
+  it('sends no further save when Save is clicked again mid-flight', () => {
+    // The disabled attribute is the guard; clicking through it must not re-fire.
+    mocks.editor = readyEditor({ editing: true, saving: true })
     render(<ProfilePage />)
 
-    await user.click(screen.getByRole('button', { name: 'Edit profile' }))
-    await user.click(screen.getByRole('button', { name: 'Save profile' }))
+    const save = screen.getByRole('button', { name: 'Save profile' })
+    fireEvent.click(save)
+    fireEvent.click(save)
 
-    await waitFor(() => expect(mocks.saveDetails).toHaveBeenCalledOnce())
-    expect(mocks.savePreferences).not.toHaveBeenCalled()
-    expect(screen.getByText('Details editor')).toBeVisible()
+    expect(mocks.saveProfile).not.toHaveBeenCalled()
+  })
+
+  it('redirects visitors who have not onboarded', () => {
+    mocks.editor = readyEditor({ redirectTo: '/onboarding/profile' })
+    render(<ProfilePage />)
+
+    expect(mocks.replace).toHaveBeenCalledWith('/onboarding/profile')
+  })
+
+  it('offers a retry when either section fails to load', () => {
+    mocks.editor = readyEditor({ ready: false, loading: false, loadError: 'Nope.' })
+    render(<ProfilePage />)
+
+    expect(screen.getByText('Load error')).toBeVisible()
   })
 })

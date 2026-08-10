@@ -1,13 +1,35 @@
-"""Deterministic cleanup of LLM-extracted values before persistence.
+"""Deterministic cleanup of values before persistence.
 
 The extraction schemas accept whatever the model produced; these helpers turn
 that into database-ready values. Anything unrecognizable becomes None — the
 raw extraction is preserved in ``resumes.parsed_content`` regardless.
+
+``clean`` and ``clip`` also serve the user-edited paths, so they live here
+rather than inside any one persistence module.
 """
 
 from datetime import date
 
 from app.utils import patterns
+
+
+def clean(value: str | None) -> str | None:
+    """Trimmed string, with blank collapsing to None."""
+    if value is None:
+        return None
+    value = value.strip()
+    return value or None
+
+
+def clip(value: str | None, limit: int) -> str | None:
+    """Lenient-path guard: LLM output is unbounded but the columns are not.
+
+    Truncates instead of erroring — a 500 on a valid resume is worse than a
+    shortened value the user can fix in the editor.
+    """
+    cleaned = clean(value)
+    return cleaned[:limit] if cleaned else None
+
 
 _MONTHS = {
     "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,

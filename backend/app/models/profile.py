@@ -5,8 +5,6 @@ from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, T
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.database import Base
-
 if TYPE_CHECKING:
     from app.models.employment import EmploymentHistory
     from app.models.evaluation import Evaluation
@@ -14,6 +12,9 @@ if TYPE_CHECKING:
     from app.models.tailored_resume import TailoredResume
     from app.models.technology import ProfileTechnology
     from app.models.user import User
+
+
+from app.database import Base
 
 
 class Profile(Base):
@@ -85,6 +86,7 @@ class Profile(Base):
     technologies: Mapped[list["ProfileTechnology"]] = relationship(
         back_populates="profile", cascade="all, delete-orphan"
     )
+
     evaluations: Mapped[list["Evaluation"]] = relationship(
         back_populates="profile", cascade="all, delete-orphan"
     )

@@ -22,7 +22,11 @@ from app.schemas.extraction import (
     ProjectItem,
     ResumeExtraction,
 )
+from app.schemas.profile import PreferencesUpdate, ProfileUpdate
 from app.services import profile_service, resume_service
+from app.services.profile import employment as employment_service
+from app.services.profile import projects as projects_service
+from app.utils import document_parser, llm
 
 
 def _pdf_bytes(text: str = "Resume") -> bytes:
@@ -37,7 +41,7 @@ def _stub_extraction(monkeypatch, extraction: ResumeExtraction) -> None:
     async def fake_extract(system, user, schema, **kwargs):
         return extraction
 
-    monkeypatch.setattr(profile_service.llm, "structured_extract", fake_extract)
+    monkeypatch.setattr(llm, "structured_extract", fake_extract)
 
 
 async def _cleanup_companies(db, profile_id: int | None, *names: str) -> None:
@@ -202,7 +206,18 @@ async def test_reupload_replaces_and_clears_but_keeps_preferences(db, test_user,
         ResumeExtraction(first_name="Jane", phone_number="123", technologies=["Python"]),
     )
     await profile_service.process_cv(db, test_user.id, "cv.pdf", _pdf_bytes())
-    await profile_service.update_profile(db, test_user.id, {"desired_roles": ["backend"]})
+    await profile_service.update_profile(
+        db,
+        test_user.id,
+        ProfileUpdate(
+            preferences=PreferencesUpdate(
+                desired_roles=["backend"],
+                desired_locations=["Berlin"],
+                work_modes_preferred=["remote"],
+                seniority_level="senior",
+            )
+        ),
+    )
 
     profile_before = (
         await db.execute(select(Profile).where(Profile.user_id == test_user.id))
@@ -233,7 +248,7 @@ async def test_failure_rolls_back_everything(db, test_user, monkeypatch):
     async def boom(db_, profile_id, projects):
         raise RuntimeError("kaboom")
 
-    monkeypatch.setattr(profile_service, "replace_projects", boom)
+    monkeypatch.setattr(projects_service, "replace_projects", boom)
 
     with pytest.raises(RuntimeError):
         await profile_service.process_cv(db, user_id, "cv.pdf", _pdf_bytes())
@@ -323,7 +338,7 @@ async def test_different_uploads_create_separate_resumes(db, test_user, monkeypa
 async def test_identical_upload_reuses_resume_at_limit(db, test_user, monkeypatch):
     user_id = test_user.id
     data = _pdf_bytes("Already stored")
-    raw_content = profile_service.document_parser.to_text(data, "stored.pdf")
+    raw_content = document_parser.to_text(data, "stored.pdf")
     matching = Resume(user_id=user_id, file_name="stored.pdf", raw_content=raw_content)
     other = Resume(user_id=user_id, file_name="other.pdf", raw_content="different")
     db.add_all([matching, other])
@@ -362,7 +377,7 @@ async def test_concurrent_company_resolution_creates_one_row(db):
     async def resolve() -> None:
         async with AsyncSessionLocal() as session:
             async with session.begin():
-                await profile_service._get_or_create_company(session, name)
+                await employment_service._get_or_create_company(session, name)
 
     await asyncio.gather(resolve(), resolve())
 

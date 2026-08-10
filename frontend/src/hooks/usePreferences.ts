@@ -4,8 +4,13 @@ import { useCallback, useEffect, useState } from "react"
 
 import { ApiError } from "@/lib/api/client"
 import { apiFieldErrors, groupError as matchGroupError, type FieldErrors } from "@/lib/api/fieldErrors"
-import { getOnboarding, savePreferences } from "@/lib/api/profile"
-import type { SeniorityLevel, WorkMode } from "@/lib/api/types"
+import { getOnboarding, updateProfile } from "@/lib/api/profile"
+import type {
+  OnboardingSnapshot,
+  PreferencesPayload,
+  SeniorityLevel,
+  WorkMode,
+} from "@/lib/api/types"
 import { SENIORITY_LEVELS, WORK_MODES } from "@/lib/api/types"
 import { COMPLETED_DESTINATION } from "@/lib/onboarding/routing"
 import type { ToastData } from "@/components/onboarding/Toast"
@@ -35,15 +40,22 @@ export interface PreferencesOptions {
   guardCompleted?: boolean
   /** Success toast after saving — for pages that stay put instead of navigating. */
   successMessage?: string
+  /**
+   * Where the snapshot comes from. The profile editor passes a shared loader so
+   * mounting this alongside the details hook costs one request, not two.
+   */
+  loadSnapshot?: () => Promise<OnboardingSnapshot | null>
 }
 
 /**
  * Owns the preferences step: hydrate from the snapshot, edit locally, persist
- * via PUT /profile/preferences. Redirect decisions surface as `redirectTo`.
+ * as the complete `preferences` section via PATCH /profile. Redirect decisions
+ * surface as `redirectTo`.
  */
 export function usePreferences({
   guardCompleted = true,
   successMessage,
+  loadSnapshot = getOnboarding,
 }: PreferencesOptions = {}) {
   const [status, setStatus] = useState<PreferencesStatus>("loading")
   const [redirectTo, setRedirectTo] = useState<string | null>(null)
@@ -77,6 +89,25 @@ export function usePreferences({
     return errors
   }, [roles, locations, workModes, seniority])
 
+  /** Seed the controls from a snapshot — used on load and after a save. */
+  const hydrate = useCallback((snapshot: OnboardingSnapshot) => {
+    const { profile } = snapshot
+    setRoles(profile.desired_roles)
+    setLocations(profile.desired_locations)
+    setWorkModes(
+      profile.work_modes_preferred.filter((m): m is WorkMode =>
+        (WORK_MODES as string[]).includes(m),
+      ),
+    )
+    setSeniority(
+      (SENIORITY_LEVELS as string[]).includes(profile.seniority_level ?? "")
+        ? (profile.seniority_level as SeniorityLevel)
+        : null,
+    )
+    setMinimumSalary(profile.minimum_salary)
+    setFieldErrors({})
+  }, [])
+
   // Bumping this re-runs the load effect; retry() (an event handler) triggers it.
   const [reloadNonce, setReloadNonce] = useState(0)
 
@@ -84,7 +115,7 @@ export function usePreferences({
     let active = true
     void (async () => {
       try {
-        const snapshot = await getOnboarding()
+        const snapshot = await loadSnapshot()
         if (!active) return
         // Deep link without a resume -> back to the profile step; done -> app.
         if (!snapshot || !snapshot.source_resume) {
@@ -99,21 +130,7 @@ export function usePreferences({
           setRedirectTo(COMPLETED_DESTINATION)
           return
         }
-        const { profile } = snapshot
-        setRoles(profile.desired_roles)
-        setLocations(profile.desired_locations)
-        setWorkModes(
-          profile.work_modes_preferred.filter((m): m is WorkMode =>
-            (WORK_MODES as string[]).includes(m),
-          ),
-        )
-        setSeniority(
-          (SENIORITY_LEVELS as string[]).includes(profile.seniority_level ?? "")
-            ? (profile.seniority_level as SeniorityLevel)
-            : null,
-        )
-        setMinimumSalary(profile.minimum_salary)
-        setFieldErrors({})
+        hydrate(snapshot)
         setStatus("ready")
       } catch (error) {
         if (!active) return
@@ -126,7 +143,7 @@ export function usePreferences({
     return () => {
       active = false
     }
-  }, [guardCompleted, reloadNonce])
+  }, [guardCompleted, reloadNonce, hydrate, loadSnapshot])
 
   const retry = useCallback(() => {
     setStatus("loading")
@@ -160,7 +177,12 @@ export function usePreferences({
     [clearFieldError],
   )
 
-  const save = useCallback(async (): Promise<boolean> => {
+  /**
+   * Validate and build the complete preferences payload, or null after
+   * surfacing the inline errors. Split from submitting so the profile editor
+   * can send this section together with details in one atomic PATCH.
+   */
+  const prepareSave = useCallback((): PreferencesPayload | null => {
     const invalid = validate()
     if (Object.keys(invalid).length) {
       setFieldErrors(invalid)
@@ -169,18 +191,45 @@ export function usePreferences({
         variant: "error",
         message: `Fix the ${count} highlighted ${count === 1 ? "field" : "fields"}.`,
       })
-      return false
+      return null
     }
     setFieldErrors({})
+    return {
+      minimum_salary: minimumSalary,
+      desired_roles: roles,
+      desired_locations: locations,
+      work_modes_preferred: workModes,
+      seniority_level: seniority as SeniorityLevel,
+    }
+  }, [validate, roles, locations, workModes, seniority, minimumSalary])
+
+  /** Re-seed the controls from the saved snapshot (backend-normalized values). */
+  const applySnapshot = useCallback(
+    (snapshot: OnboardingSnapshot) => {
+      hydrate(snapshot)
+      if (successMessage) setToast({ variant: "success", message: successMessage })
+    },
+    [hydrate, successMessage],
+  )
+
+  /** Route a failed save onto this section's controls. */
+  const applySaveError = useCallback((error: unknown) => {
+    // Server-side field errors (e.g. an empty list slipped past the client)
+    // land on the exact section instead of a bare toast.
+    if (error instanceof ApiError && error.fields.length) {
+      setFieldErrors(apiFieldErrors(error, { section: "preferences" }))
+    }
+    setToast(errorToast(error))
+  }, [])
+
+  /** Wizard convenience: prepare, submit this section alone, apply the result. */
+  const save = useCallback(async (): Promise<boolean> => {
+    const payload = prepareSave()
+    if (!payload) return false
     setSaving(true)
     try {
-      const snapshot = await savePreferences({
-        minimum_salary: minimumSalary,
-        desired_roles: roles,
-        desired_locations: locations,
-        work_modes_preferred: workModes,
-        seniority_level: seniority as SeniorityLevel,
-      })
+      const snapshot = await updateProfile({ preferences: payload })
+      // The wizard's last step must not "finish" an incomplete profile.
       if (!snapshot.onboarding_complete) {
         const missingProfile = (snapshot.completion_issues ?? []).filter(
           (issue) => issue.step === "profile",
@@ -195,18 +244,15 @@ export function usePreferences({
         })
         return false
       }
-      if (successMessage) setToast({ variant: "success", message: successMessage })
+      applySnapshot(snapshot)
       return true
     } catch (error) {
-      // Server-side field errors (e.g. an empty list slipped past the client)
-      // land on the exact section instead of a bare toast.
-      if (error instanceof ApiError && error.fields.length) setFieldErrors(apiFieldErrors(error))
-      setToast(errorToast(error))
+      applySaveError(error)
       return false
     } finally {
       setSaving(false)
     }
-  }, [validate, roles, locations, workModes, seniority, minimumSalary, successMessage])
+  }, [prepareSave, applySnapshot, applySaveError])
 
   return {
     status,
@@ -249,6 +295,9 @@ export function usePreferences({
     fieldErrors,
     fieldError: (path: string) => fieldErrors[path],
     groupError: (prefix: string) => matchGroupError(fieldErrors, prefix),
+    prepareSave,
+    applySnapshot,
+    applySaveError,
     save,
   }
 }

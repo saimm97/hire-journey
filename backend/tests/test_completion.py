@@ -3,7 +3,7 @@
 import pytest
 
 from app.models.profile import Profile
-from app.services.profile_service import is_onboarding_complete, onboarding_completion_issues
+from app.services.profile import is_onboarding_complete, onboarding_completion_issues
 
 
 def _profile(**overrides) -> Profile:

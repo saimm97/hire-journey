@@ -1,6 +1,7 @@
 "use client"
 
-import type { EditableProject, ListController } from "@/hooks/useOnboardingProfile"
+import type { ListController } from "@/hooks/useProfileDraft"
+import type { EditableProject } from "@/lib/onboarding/profileDraft"
 import { AddItemButton, EditorCard } from "./EditorCard"
 import { ChipInput } from "./ChipInput"
 import { Field } from "./Field"

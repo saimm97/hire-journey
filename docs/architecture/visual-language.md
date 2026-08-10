@@ -28,6 +28,8 @@ This document defines the default visual rules for new and existing screens.
 Geist Sans is the only interface and heading family. Geist Mono is reserved for
 request references and genuinely technical or tabular values such as dates,
 URLs, and salary figures. It is not used to make ordinary labels look technical.
+Both families are bundled through Vercel's self-hosted `geist` package so local
+development and production builds do not depend on reaching Google Fonts.
 
 The standard scale is:
 

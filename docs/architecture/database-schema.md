@@ -1,11 +1,13 @@
 # Current database schema
 
-- Status: current as of 2026-07-18
+- Status: current as of 2026-08-04
 - Alembic head: `f82d1c6a4e39`
 - Implementation: `backend/app/models/`
 
-This document describes the schema after the profile/onboarding refactor. The
-SQLAlchemy models and Alembic migrations are the executable source of truth.
+This document describes the ORM schema used by the user-onboarding branch. The
+SQLAlchemy models are the executable source of truth for this branch. Historical
+Alembic revisions remain immutable so existing databases and downstream
+branches retain a reproducible migration chain.
 
 ## Entity relationship diagram
 
@@ -24,12 +26,6 @@ erDiagram
     TECHNOLOGIES ||--o{ PROFILE_TECHNOLOGIES : categorizes
     PROFILE_PROJECTS ||--o{ PROFILE_PROJECT_TECHNOLOGIES : uses
     TECHNOLOGIES ||--o{ PROFILE_PROJECT_TECHNOLOGIES : categorizes
-
-    COMPANIES ||--o{ JOBS : posts
-    PROFILES ||--o{ EVALUATIONS : receives
-    JOBS ||--o{ EVALUATIONS : evaluates
-    PROFILES ||--o{ TAILORED_RESUMES : generates
-    JOBS ||--o{ TAILORED_RESUMES : targets
 
     USERS {
         int id PK
@@ -124,39 +120,6 @@ erDiagram
         timestamptz created_at
     }
 
-    JOBS {
-        int id PK
-        int company_id FK
-        string title
-        text description
-        json parsed_desc
-        text url UK
-        string location
-        int salary_min
-        int salary_max
-        timestamptz posted_at
-        timestamptz deadline
-        timestamptz updated_at
-    }
-
-    EVALUATIONS {
-        int id PK
-        int job_id FK
-        int profile_id FK
-        int match_score
-        json strengths
-        json weaknesses
-        json recommendations
-        timestamptz created_at
-    }
-
-    TAILORED_RESUMES {
-        int id PK
-        int profile_id FK
-        int job_id FK
-        text content
-        timestamptz created_at
-    }
 ```
 
 
@@ -217,20 +180,18 @@ existing resumes before insertion, making concurrent uploads safe.
 constraint; SQL cannot express a cross-row count with a normal check.
 - There is no `slot_number` or `is_active` column. The newest resume by
 `created_at` is treated as the current resume.
-- Replacing a resume updates the existing row. A generated tailored resume can
-remain a downloadable artifact without becoming an uploaded resume.
+- Replacing a resume updates the existing row without consuming another slot.
 
 
 
-### Jobs, evaluations, and tailored resumes
+### Branch scope and migration history
 
-- Jobs belong to normalized companies and are currently unique by URL.
-- Evaluations belong to a profile/job pair conceptually, although duplicate
-pairs are not currently prohibited.
-- `match_score` is intended to be in the range 0–100; this range is not yet
-protected by a database check constraint.
-- Tailored resumes belong to a profile and target a job.
-- Application tracking is not part of the current schema.
+- Job ingestion, search, evaluation, and tailored-resume ORM modules are not
+  registered on this onboarding branch.
+- Historical migrations that mention those domains are retained because they
+  have already been shared and are ancestors of the onboarding migration head.
+- Downstream job branches retain their own models and implementation. Removing
+  them from this branch does not remove their Git history or branch contents.
 
 
 
@@ -249,7 +210,6 @@ protected by a database check constraint.
 | No duplicate technology bridge rows | Composite PK              | —                  | Conflict-safe insert    | —                     |
 | Maximum two resumes                 | —                         | Constant is tested | Row lock + count        | Pending               |
 | Current resume is newest upload     | —                         | No active field    | Ordered by `created_at` | Display pending       |
-| Job URL is unique                   | Unique constraint         | —                  | Existing job workflow   | —                     |
 
 
 
@@ -257,12 +217,11 @@ protected by a database check constraint.
 ## Referential actions
 
 - Deleting a user cascades to their profile and uploaded resumes.
-- Deleting a profile cascades to its employment rows, project memberships,
-technology memberships, evaluations, and tailored resumes.
+- Deleting a profile cascades to its employment rows, project memberships, and
+technology memberships.
 - Deleting a project cascades to its profile memberships.
 - Referenced companies and technologies use restrictive deletion semantics to
 avoid silently losing employment or technology meaning.
-- Deleting a job cascades to evaluations and tailored resumes.
 - Deleting the resume referenced by `profiles.source_resume_id` sets that field
 to null.
 
@@ -286,13 +245,7 @@ has been shared.
 ## Known limitations and deferred decisions
 
 - The UUID-to-integer migration is a destructive development reset; it does not preserve existing rows.
-- Provider/source modelling and cross-provider job deduplication are deferred
-until job ingestion becomes the active workstream. URL uniqueness is not a
-semantic cross-provider deduplication strategy.
 - Profile JSONB fields validate their top-level type, but their inner object
 schemas are intentionally flexible for now.
 - The resume limit is not protected from direct SQL writes that bypass the
 service.
-- Evaluation score bounds and uniqueness for a profile/job pair remain to be
-decided before evaluation work resumes.
-

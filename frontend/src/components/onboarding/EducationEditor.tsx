@@ -1,6 +1,7 @@
 "use client"
 
-import type { EditableEducation, ListController } from "@/hooks/useOnboardingProfile"
+import type { ListController } from "@/hooks/useProfileDraft"
+import type { EditableEducation } from "@/lib/onboarding/profileDraft"
 import { AddItemButton, EditorCard } from "./EditorCard"
 import { TextField } from "./TextField"
 import { YearMonthField } from "./YearMonthField"

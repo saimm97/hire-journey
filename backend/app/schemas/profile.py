@@ -8,7 +8,7 @@ the correct behavior (unlike LLM output, which gets lenient normalization).
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from app.schemas.project import ProjectRead
 from app.utils import normalization, patterns
@@ -169,10 +169,17 @@ class OnboardingSnapshot(BaseModel):
     completion_issues: list[CompletionIssue]
 
 
-# ── Details step (PUT /profile/details) ────────────────────────────────
+class StrictRequest(BaseModel):
+    """Base for user-edited payloads: an unknown key is a 422, never a shrug.
+
+    Every collection below is a full replacement, so a silently dropped key
+    doesn't merely fail to apply — it clears the stored value.
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
 
-class SocialLinksUpdate(BaseModel):
+class SocialLinksUpdate(StrictRequest):
     github_url: str | None = None
     linkedin_url: str | None = None
     portfolio_url: str | None = None
@@ -183,7 +190,7 @@ class SocialLinksUpdate(BaseModel):
         return _url_or_none(value)
 
 
-class EducationEntry(BaseModel):
+class EducationEntry(StrictRequest):
     institution: str = Field(min_length=1, max_length=255)
     degree: str | None = Field(default=None, max_length=255)
     field: str | None = Field(default=None, max_length=255)
@@ -203,7 +210,7 @@ class EducationEntry(BaseModel):
         return value
 
 
-class CertificationEntry(BaseModel):
+class CertificationEntry(StrictRequest):
     name: str = Field(min_length=1, max_length=255)
     issuer: str | None = Field(default=None, max_length=255)
     issued_at: str | None = None
@@ -222,7 +229,7 @@ class CertificationEntry(BaseModel):
         return value
 
 
-class EmploymentEntry(BaseModel):
+class EmploymentEntry(StrictRequest):
     company_name: str = Field(min_length=1, max_length=255)
     title: str = Field(min_length=1, max_length=255)
     start_date: str | None = None
@@ -242,7 +249,7 @@ class EmploymentEntry(BaseModel):
         return value
 
 
-class ProjectEntry(BaseModel):
+class ProjectEntry(StrictRequest):
     """A project in the details payload.
 
     project_id present -> edit of an existing project (must belong to this
@@ -267,8 +274,8 @@ class ProjectEntry(BaseModel):
         return _clean_str_list(value)
 
 
-class ProfileDetailsUpdate(BaseModel):
-    """The complete details step; collections are full replacements (PUT)."""
+class ProfileDetailsUpdate(StrictRequest):
+    """The complete details step; collections are full replacements (PATCH)."""
 
     first_name: str | None = Field(default=None, max_length=100)
     last_name: str | None = Field(default=None, max_length=100)
@@ -289,10 +296,10 @@ class ProfileDetailsUpdate(BaseModel):
         return _clean_str_list(value)
 
 
-# ── Preferences step (PUT /profile/preferences) ────────────────────────
+# ── Preferences section (PATCH /profile) ───────────────────────────────
 
 
-class PreferencesUpdate(BaseModel):
+class PreferencesUpdate(StrictRequest):
     # Upper bound keeps the value safely inside the INTEGER column (int32).
     minimum_salary: int | None = Field(default=None, ge=0, le=100_000_000)
     desired_roles: list[str] = Field(max_length=100)
@@ -332,31 +339,14 @@ class PreferencesUpdate(BaseModel):
 # ── Post-onboarding partial editing (PATCH /profile) ───────────────────
 
 
-class ProfileUpdate(BaseModel):
+class ProfileUpdate(StrictRequest):
     """Editable onboarding fields; omitted keys remain unchanged on PATCH."""
 
-    first_name: str | None = Field(default=None, max_length=100)
-    last_name: str | None = Field(default=None, max_length=100)
-    phone_number: str | None = Field(default=None, max_length=50)
-    location: str | None = Field(default=None, max_length=255)
-    social_links: dict[str, str] | None = None
-    education: list[dict[str, Any]] | None = None
-    certifications: list[dict[str, Any]] | None = None
-    title: str | None = Field(default=None, max_length=255)
-    summary: str | None = None
-    minimum_salary: int | None = Field(default=None, ge=0, le=100_000_000)
-    desired_locations: list[str] | None = None
-    desired_roles: list[str] | None = None
-    work_modes_preferred: list[str] | None = None
-    seniority_level: str | None = Field(default=None, max_length=50)
-    technologies: list[str] | None = None
+    details: ProfileDetailsUpdate | None = None
+    preferences: PreferencesUpdate | None = None
 
-    @field_validator("desired_locations", "desired_roles", "work_modes_preferred")
-    @classmethod
-    def null_array_to_empty(cls, value: list[str] | None) -> list[str]:
-        return value if value is not None else []
-
-    @field_validator("social_links")
-    @classmethod
-    def validate_social_links(cls, value: dict[str, str] | None) -> dict[str, str]:
-        return value if value is not None else {}
+    @model_validator(mode="after")
+    def require_section(self) -> "ProfileUpdate":
+        if self.details is None and self.preferences is None:
+            raise ValueError("Provide details or preferences.")
+        return self

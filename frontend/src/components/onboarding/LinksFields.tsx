@@ -1,6 +1,6 @@
 "use client"
 
-import type { SocialLinksState } from "@/hooks/useOnboardingProfile"
+import type { SocialLinksState } from "@/lib/onboarding/profileDraft"
 import { TextField } from "./TextField"
 
 interface LinksFieldsProps {
