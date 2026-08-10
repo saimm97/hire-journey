@@ -238,6 +238,8 @@ cd ../frontend && npm test
 - [Documentation index](docs/README.md)
 - [End-to-end user onboarding flow](docs/architecture/user-onboarding-flow.md)
 - [Current database schema and ERD](docs/architecture/database-schema.md)
+- [Job ingestion architecture](docs/architecture/job-ingestion.md)
+- [Run job ingestion locally](docs/runbooks/job-ingestion.md)
 - [Architecture decisions](docs/adr/)
 
 Update the relevant documentation in the same pull request as schema or
@@ -282,9 +284,13 @@ career-engine/
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | No       | Token expiry, default 60                                          |
 | `GOOGLE_CLIENT_ID`            | No       | OAuth Web client id for "Continue with Google"; blank disables it |
 | `MAX_UPLOAD_MB`               | No       | Max CV upload size in MB, default 5                               |
-| `MAX_RESUMES_PER_USER`        | No       | Per-user resume limit, default 2                                  |
-| `GROQ_API_KEY`                | No       | Preferred resume-extraction provider key                          |
-| `GEMINI_API_KEY`              | No       | Gemini resume-extraction provider key                             |
+| `ATS_HTTP_TIMEOUT_SECONDS`    | No       | ATS HTTP operation timeout, default 10 seconds                    |
+| `ATS_MAX_RESPONSE_MB`         | No       | Maximum decoded ATS response size, default 50 MB                  |
+| `ATS_MAX_ATTEMPTS`            | No       | Maximum attempts for transient ATS failures, default 3            |
+| `ATS_GLOBAL_CONCURRENCY`      | No       | Maximum concurrent company fetches, default 12                    |
+| `ATS_HTTP_MAX_CONNECTIONS`    | No       | Shared ATS HTTP connection-pool limit, default 20                 |
+| `ATS_HTTP_MAX_KEEPALIVE_CONNECTIONS` | No | Shared ATS keep-alive pool limit, default 10                  |
+| `GEMINI_API_KEY`              | Yes      | Gemini API key for AI features                                    |
 | `OPENAI_API_KEY`              | No       | Optional OpenAI fallback                                          |
 
 At least one LLM provider key is required to extract structured resume data.

@@ -1,0 +1,22 @@
+{
+  "jobs": [
+    {
+      "id": 731001,
+      "title": "Senior Platform Engineer",
+      "absolute_url": "https://boards.greenhouse.io/hijfixture/jobs/731001",
+      "location": {
+        "name": "Remote — United States"
+      },
+      "content": "&lt;h2&gt;About the role&lt;/h2&gt;&lt;p onclick=\"alert('unsafe')\"&gt;Build reliable systems.&lt;/p&gt;&lt;script&gt;alert('unsafe')&lt;/script&gt;",
+      "first_published": "2026-07-01T09:30:00+00:00",
+      "application_deadline": "2026-08-15T23:59:59+00:00",
+      "pay_input_ranges": [
+        {
+          "min_cents": 15000000,
+          "max_cents": 18500000,
+          "currency_type": "USD"
+        }
+      ]
+    }
+  ]
+}

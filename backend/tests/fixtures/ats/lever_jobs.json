@@ -1,0 +1,30 @@
+[
+  {
+    "id": "a351b404-21f8-4dca-b64d-1104f3721cb4",
+    "text": "Backend Engineer",
+    "hostedUrl": "https://jobs.lever.co/hijfixture/a351b404-21f8-4dca-b64d-1104f3721cb4",
+    "categories": {
+      "location": "New York, NY",
+      "allLocations": [
+        "New York, NY",
+        "Remote"
+      ]
+    },
+    "description": "<p class=\"provider-copy\">Build reliable services.</p>",
+    "descriptionPlain": "Build reliable services.",
+    "lists": [
+      {
+        "text": "Requirements",
+        "content": "<ul><li>Python</li><li>PostgreSQL</li></ul>"
+      }
+    ],
+    "additional": "<p>Equal opportunity employer.</p><script>alert('unsafe')</script>",
+    "createdAt": 1711403416463,
+    "salaryRange": {
+      "min": 105000,
+      "max": 145000,
+      "currency": "USD",
+      "interval": "per-year-salary"
+    }
+  }
+]
