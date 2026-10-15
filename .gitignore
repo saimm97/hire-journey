@@ -224,3 +224,6 @@ __marimo__/
 /env
 
 PRD.md
+
+# Local runtime state from script.sh
+/.run
